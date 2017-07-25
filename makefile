@@ -9,6 +9,7 @@
 PROJECT = wirekite
 
 #  Set your MCU type here
+#  - TeensyLC: MKL26Z64 / cortex-m0plus / 48000000
 MCU = MKL26Z64
 CPU = cortex-m0plus
 F_CPU = 48000000
@@ -84,12 +85,16 @@ stats: $(OUTPUTDIR)/$(PROJECT).elf
 dump: $(OUTPUTDIR)/$(PROJECT).elf
 	$(OBJDUMP) -h $(OUTPUTDIR)/$(PROJECT).elf    
 
-burn: $(PROJECT).hex
+burn: $(OUTPUTDIR)/$(PROJECT).hex
 	teensy_loader_cli -mmcu=$(MCU) -w -v $<
+
+teensylc: $(OUTPUTDIR)/$(PROJECT).hex
+	cp $(OUTPUTDIR)/wirekite.hex $(OUTPUTDIR)/wirekite_teensylc.hex
 
 clean:
 	$(REMOVE) $(OBJDIR)
-	$(REMOVE) $(OUTPUTDIR)
+	$(REMOVE) $(OUTPUTDIR)/*.elf
+	$(REMOVE) $(OUTPUTDIR)/wirekite.hex
 
 toolvers:
 	$(CC) --version | sed q

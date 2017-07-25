@@ -17,7 +17,7 @@ This repository contains the Teensy code.
 - Analog input
 - PWM output
 
-## Comming soon
+## Coming soon
 
 - Instructions to setup up development environment
 - Instructions how to install the Teensy sofware (no need to build it yourself)
