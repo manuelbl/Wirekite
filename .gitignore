@@ -1,0 +1,12 @@
+*.o
+*.a
+*.d
+*.lst
+*.hex
+*.elf
+*.swp
+*~
+ThirdParty/
+xcuserdata/
+build/
+DerivedData/
