@@ -5,9 +5,6 @@
 #  https://opensource.org/licenses/MIT
 #
 
-#  Project Name
-PROJECT = wirekite
-
 #  Set your MCU type here
 #  - TeensyLC: MKL26Z64 / cortex-m0plus / 48000000
 MCU = MKL26Z64
@@ -16,6 +13,9 @@ F_CPU = 48000000
 
 #  Tool path (GNU ARM Embedded Toolchain base directory)
 TOOLDIR = ~/Documents/Software/gcc-arm-none-eabi
+
+#  Project Name
+PROJECT = wirekite
 
 #  Project directory structure
 SRCDIR = src
