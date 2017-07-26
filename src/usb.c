@@ -176,15 +176,15 @@ static string_desc_t language_desc = {
 };
 
 static string_desc_t manufacturer_desc = {
-    .bLength = 2 + 9 * 2,
+    .bLength = 2 + 21 * 2,
     .bDescriptorType = 3, // string
-    .wString = { 'C', 'o', 'd', 'e', 'c', 'r', 'e', 't', 'e' }
+    .wString = { 'M', 'a', 'n', 'u', 'e', 'l', ' ', 'B', 'l', 'e', 'i', 'c', 'h', 'e', 'n', 'b', 'a', 'c', 'h', 'e', 'r' }
 };
 
 static string_desc_t product_desc = {
-    .bLength = 2 + 10 * 2,
+    .bLength = 2 + 8 * 2,
     .bDescriptorType = 3, // string
-    .wString = { 'I', 'O', 'E', 'x', 't', 'e', 'n', 'd', 'e', 'r' }
+    .wString = { 'W', 'i', 'r', 'e', 'k', 'i', 't', 'e' }
 };
 
 #define WCID_VENDOR_CODE 0x22
@@ -259,8 +259,8 @@ static const descriptor_entry_t descriptors[] = {
     { 0x0100, 0x0000, device_desc, sizeof(device_desc) },
     { 0x0200, 0x0000, &configuration_desc, sizeof(configuration_desc) },
     { 0x0300, 0x0000, &language_desc, 4 },
-    { 0x0301, 0x0409, &manufacturer_desc, 2 + 9 * 2 },
-    { 0x0302, 0x0409, &product_desc, 2 + 10 * 2 },
+    { 0x0301, 0x0409, &manufacturer_desc, 2 + 21 * 2 },
+    { 0x0302, 0x0409, &product_desc, 2 + 8 * 2 },
     { 0x03ee, 0x0000, &msft_sig_desc, 2 + 8 * 2 },
     { 0x0000, 0x0000, NULL, 0 }
 };

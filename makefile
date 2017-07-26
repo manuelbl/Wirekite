@@ -88,6 +88,9 @@ dump: $(OUTPUTDIR)/$(PROJECT).elf
 burn: $(OUTPUTDIR)/$(PROJECT).hex
 	teensy_loader_cli -mmcu=$(MCU) -w -v $<
 
+release: $(OUTPUTDIR)/$(PROJECT).hex
+	./release.sh
+
 teensylc: $(OUTPUTDIR)/$(PROJECT).hex
 	cp $(OUTPUTDIR)/wirekite.hex $(OUTPUTDIR)/wirekite_teensylc.hex
 
