@@ -17,10 +17,10 @@
 #include "util.h"
 
 
-extern "C" void uart_echo();
+extern void uart_echo();
 void check_usb();
 
-extern "C" int main(void)
+extern int main(void)
 {
     buffers_init();
     analog_init();
