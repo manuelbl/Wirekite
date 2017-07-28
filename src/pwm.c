@@ -65,6 +65,8 @@ static volatile uint32_t* PCR_ADDR[] = {
     &PORTE_PCR0
 };
 
+#define PCR(pin_info) (*(PCR_ADDR[PORT_IDX(pin_info)] + PIN_IDX(pin_info)))
+
 static uint16_t modulos[] = { 0, 0, 0};
 static int16_t  values[NUM_PINS];
 
@@ -150,7 +152,7 @@ pwm_pin pwm_pin_init(uint8_t pin)
     pwm_pin_set_value(pin, 0);
 
     uint16_t pin_info = pin_map[pin];
-    *(PCR_ADDR[PORT_IDX(pin_info)] + PIN_IDX(pin_info)) = PORT_PCR_MUX(ALT(pin_info)) | PORT_PCR_DSE | PORT_PCR_SRE;
+    PCR(pin_info) = PORT_PCR_MUX(ALT(pin_info)) | PORT_PCR_DSE | PORT_PCR_SRE;
 
     return pin;
 }
@@ -165,7 +167,7 @@ void pwm_pin_release(pwm_pin port_id)
     values[port_id] = -1;
 
     uint16_t pin_info = pin_map[port_id];
-    *(PCR_ADDR[PORT_IDX(pin_info)] + PIN_IDX(pin_info)) = 0;
+    PCR(pin_info) = 0;
 }
 
 

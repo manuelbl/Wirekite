@@ -54,12 +54,29 @@ static const uint8_t pin_map[] = {
     PORT_ENC(PORT_E)  PIN_IDX_ENC(30)
 };
 
+static volatile uint32_t* PCR_ADDR[] = {
+    &PORTA_PCR0,
+    &PORTB_PCR0,
+    &PORTC_PCR0,
+    &PORTD_PCR0,
+    &PORTE_PCR0
+};
+
+#define PCR_PTR(pin_info) (PCR_ADDR[PORT_IDX(pin_info)] + PIN_IDX(pin_info))
+
+static volatile uint32_t* GPIO_BASE_ADDR[] = {
+    &GPIOA_PDOR,
+    &GPIOB_PDOR,
+    &GPIOC_PDOR,
+    &GPIOD_PDOR,
+    &GPIOE_PDOR
+};
+
+#define GPIO_BASE_PTR(pin_info) (GPIO_BASE_ADDR[PORT_IDX(pin_info)])
+
+
 static uint8_t pins[27];
 static int8_t num_init_pins = 0;
-
-
-static volatile uint32_t* pcr_addr(uint8_t pin_info);
-static volatile uint32_t* gpio_base_addr(uint8_t pin_info);
 
 
 digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attributes)
@@ -89,7 +106,7 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     uint16_t pin_info = pin_map[pin_idx];
 
     // configure direction
-    volatile uint32_t* gpio_ptr = gpio_base_addr(pin_info) + 5; // FGPIOx_PDDR
+    volatile uint32_t* gpio_ptr = GPIO_BASE_PTR(pin_info) + 5; // FGPIOx_PDDR
     uint32_t mask = 1 << (uint32_t) PIN_IDX(pin_info);
     if (direction == DIGI_PIN_INPUT) {
         *gpio_ptr &= ~mask;
@@ -100,9 +117,11 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     // calculate pin configuration
     uint32_t pin_control = PORT_PCR_MUX(1);
     if (direction == DIGI_PIN_OUTPUT) {
+        pin_control |= PORT_PCR_SRE;
         if (attributes & DIGI_PIN_OUT_HIGH_CURRENT)
             pin_control |= PORT_PCR_DSE;
     } else {
+        pin_control |= PORT_PCR_PFE;
         if (attributes & DIGI_PIN_IN_PULLUP)
             pin_control |= PORT_PCR_PE | PORT_PCR_PS;
         else if (attributes & DIGI_PIN_IN_PULLDOWN)
@@ -110,7 +129,7 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     }
 
     // assign physical pin
-    volatile uint32_t* pcr_ptr = pcr_addr(pin_info);
+    volatile uint32_t* pcr_ptr = PCR_PTR(pin_info);
     *pcr_ptr = pin_control;
 
     // configure interrupt if needed
@@ -139,11 +158,11 @@ void digital_pin_release(digital_pin pin)
     pins[pin] = PIN_UNASSIGNED;
 
     // disable pin
-    volatile uint32_t* pcr_ptr = pcr_addr(pin_info);
+    volatile uint32_t* pcr_ptr = PCR_PTR(pin_info);
     *pcr_ptr = PORT_PCR_ISF;
 
     uint32_t mask = 1 << (uint32_t) PIN_IDX(pin_info);
-    volatile uint32_t* gpio_base_ptr = gpio_base_addr(pin_info); 
+    volatile uint32_t* gpio_base_ptr = GPIO_BASE_PTR(pin_info); 
 
     // reset value
     *(gpio_base_ptr + 2) = mask; // FGPIOx_PCOR
@@ -158,7 +177,7 @@ void digital_pin_set_output(digital_pin pin, uint8_t value)
     uint8_t pin_info = pins[pin];
 
     // compute register address
-    volatile uint32_t* gpio_ptr = gpio_base_addr(pin_info);
+    volatile uint32_t* gpio_ptr = GPIO_BASE_PTR(pin_info);
     if (value)
         gpio_ptr += 1; // FGPIOx_PSOR
     else
@@ -175,68 +194,11 @@ uint8_t digital_pin_get_input(digital_pin pin)
     uint8_t pin_info = pins[pin];
 
     // compute register address
-    volatile uint32_t* gpio_ptr = gpio_base_addr(pin_info) + 4;
+    volatile uint32_t* gpio_ptr = GPIO_BASE_PTR(pin_info) + 4;
 
     // get value
     uint32_t mask = 1 << (uint32_t) PIN_IDX(pin_info);
     return (*gpio_ptr & mask) ? DIGI_PIN_ON : DIGI_PIN_OFF;
-}
-
-
-volatile uint32_t* pcr_addr(uint8_t pin_info)
-{
-    uint8_t port = PORT_IDX(pin_info);
-
-    // compute pin control register addr
-    volatile uint32_t * pcr_ptr;
-    switch (port) {
-        case PORT_A:
-            pcr_ptr = &PORTA_PCR0;
-            break;
-        case PORT_B:
-            pcr_ptr = &PORTB_PCR0;
-            break;
-        case PORT_C:
-            pcr_ptr = &PORTC_PCR0;
-            break;
-        case PORT_D:
-            pcr_ptr = &PORTD_PCR0;
-            break;
-        default:
-            pcr_ptr = &PORTE_PCR0;
-            break;
-    }
-    uint8_t pin = PIN_IDX(pin_info);
-    
-    return pcr_ptr + pin;
-}
-
-
-volatile uint32_t* gpio_base_addr(uint8_t pin_info)
-{
-    uint8_t port = PORT_IDX(pin_info);
-
-    // compute pin control register addr
-    volatile uint32_t * pcr_ptr;
-    switch (port) {
-        case PORT_A:
-            pcr_ptr = &GPIOA_PDOR;
-            break;
-        case PORT_B:
-            pcr_ptr = &GPIOB_PDOR;
-            break;
-        case PORT_C:
-            pcr_ptr = &GPIOC_PDOR;
-            break;
-        case PORT_D:
-            pcr_ptr = &GPIOD_PDOR;
-            break;
-        default:
-            pcr_ptr = &GPIOE_PDOR;
-            break;
-    }
-    
-    return pcr_ptr;
 }
 
 
@@ -248,9 +210,9 @@ digital_pin digital_pin_get_interrupt_pin()
         if (pin_info & INTERRUPT_EN) {
 
             // check if the pin's interrupt flag is set
-            volatile uint32_t* pcr = pcr_addr(pin_info);
-            if (*pcr & PORT_PCR_ISF) {
-                *pcr |= PORT_PCR_ISF; // clear the flag
+            volatile uint32_t* pcr_ptr = PCR_PTR(pin_info);
+            if (*pcr_ptr & PORT_PCR_ISF) {
+                *pcr_ptr |= PORT_PCR_ISF; // clear the flag
                 return i;
             }
         }
