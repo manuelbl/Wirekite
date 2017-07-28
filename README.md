@@ -2,13 +2,16 @@
 
 Wirkekite let's you wire up digital and analog inputs and outputs to your Mac or Windows computer. From there, you control them with software written in Objective-C, Swift or .NET running on your computer. 
 
-To connect the inputs and outputs, use a [Teensy development board](https://www.pjrc.com/teensy/) connected via USB. It looks a lot like an Arduino Nano connected for programming but with Wirekite the custom code is written for and run on your computer – not for the microcontroller.
+To connect the inputs and outputs, use a [Teensy board](https://www.pjrc.com/teensy/) connected via USB. It looks a lot like an Arduino Nano connected for programming. Yet with Wirekite the custom code is written for and run on your computer – not for the microcontroller.
 
-This repository contains the Teensy code. Macintosh and Windows libraries are coming soon to a repository nearby.
+Once you have prepared the Teensy board ([one-time setup](docs/prepare_teensy.md)), you should be using the [MacOS code](https://github.com/manuelbl/WirekiteMac) or the Windows code (coming soon). Only few people will work with this repository.
+
 
 ## Supported boards
 
 - [Teensy LC](https://www.pjrc.com/store/teensylc.html)
+- [Teensy 3.2](https://www.pjrc.com/store/teensy32.html) (soon)
+
 
 ## Supported inputs / outputs / protocols
 
@@ -16,37 +19,11 @@ This repository contains the Teensy code. Macintosh and Windows libraries are co
 - Digital input
 - Analog input
 - PWM output
+- I2C (soon)
 
 
-## Prepare your Teensy
 
-There is no need to build the Teensy code yourself. It is the same code code for everybody. Your energy should go into the Windows or Mac program. So to prepare your Teensy, you just need to load the software once:
-
-1. Download and install the Teensy Loader from [PJRC](https://www.pjrc.com):
-    - MacOS: [Teensy Loader for MacOS](https://www.pjrc.com/teensy/teensy.dmg)
-    - Windows: [Teensy Loader for Windows](https://www.pjrc.com/teensy/teensy.exe)
-    - Linux: [Teensy Loader for Ubuntu Linux](https://www.pjrc.com/teensy/loader_linux.html)
-
-2. Download the Teensy binary code (.hex file):
-
-    - Teensy LC: [https://raw.githubusercontent.com/manuelbl/Wirekite/master/bin/wirekite_teensylc.hex](https://raw.githubusercontent.com/manuelbl/Wirekite/master/bin/wirekite_teensylc.hex) (right-click and download; otherwise it opens in the browser as it is an ASCII file)
-
-3. Connect your Teensy to your Mac / Windows / Linux computer
-
-4. Start the Teensy Loader and open downloaded .hex file (from *File* menu or top left icon in the toolbar)
-
-5. Enable the *automatic* mode (from the *Operations* menu or the top right icon in the toolbar)
-
-6. Press the reset button on the Teensy board.
-
-The Teensy Loader will then load the software into the flash memory of the board and reboot it. It only takes about 1 second.
-
-You can always go back to use your Teensy for other purposes, such a programming it yourself with the Arduino IDE and Teensyduino. The original bootloader is not changed.
-
-There is no need to install any drivers for the Wirekite. It is automatically recognized as a custom USB device by the Mac and Windows (Vista and later).
-
-
-## Building the Teensy software yourself
+## Building the Teensy software yourself (rarely needed)
 
 If you want to build the software yourself - even though this is not necessary - it is quite straightforward.
 
@@ -85,7 +62,6 @@ Wirekite is a bare-metal implementation, i.e. it does not depend on any operatin
 
 ## Coming soon
 
-- Objective-C library for MacOS
 - Library for Windows
 - Support for Teensy 3.2
 - I2C
