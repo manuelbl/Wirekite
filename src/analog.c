@@ -188,7 +188,7 @@ analog_pin analog_get_completed_pin(int16_t* value)
         __enable_irq();
     }
     // extend value from 10bits to 15bits
-    *value = (v << 5) | (v & 0x1f);
+    *value = (v << 5) | (v >> 5);
 
     return completed_conversion;
 }
