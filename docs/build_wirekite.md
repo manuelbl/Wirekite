@@ -6,21 +6,13 @@ into writing software for your Mac or Windows computer using the
 [Wirekite MacOS library](https://github.com/manuelbl/WirekiteMac)
 or the Wirekite Windows library (coming soon).
 
-If you want to build it yourself, it is quite straightforward.
+If you want to build it yourself, it is quite straightforward on the Mac (and probably on Linux).
 
 1. Download the GNU ARM Embedded Toolchain (Teensy uses ARM processors)from [GNU ARM Embedded Toolchain](https://developer.arm.com/open-source/gnu-toolchain/gnu-rm) and unpack it on your computer. I put it in a folder called *Software* within my *Documents* folder and renamed the unpacked folder *gcc-arm-none-eabi-6-2017-...* to *gcc-arm-none-eabi*.
 
-2. Verify you have *GNU Make* installed on your computer. If not, then Windows users can download it from [Make for Windows](http://gnuwin32.sourceforge.net/packages/make.htm) and Macintosh users should somehow fix their setup as GNU Make is part of every original MacOS installation.
+2. Modify the *makefile* to match your Teensy board and environment, i.e. set the variables *MCU*, *CPU*, *F_CPU* and *TOOLDIR* at the top of the file. Read the comments for further instructions.
 
-```
-$ make -v
-GNU Make 3.81
-...
-```
-
-3. Modify the *makefile* to match your Teensy board and environment, i.e. set the variables *MCU*, *CPU*, *F_CPU* and *TOOLDIR* at the top of the file. Read the comments for further instructions.
-
-4. Build it
+3. Build it
 
 ```
 $ make
@@ -35,6 +27,12 @@ arm-none-eabi-size bin/wirekite.elf
 That's it. The resulting file is `bin/wirekite.hex` and can be loaded with the Teensy loader.
 
 Use the IDE of your choice. I've used [Visual Studio Code](https://code.visualstudio.com/) from Microsoft – the new and slick IDE from Microsoft. You have to install the *C/C++* extension (click the *Extensions* icon on the left, search for *cpptools* and install *C/C++*).
+
+
+### Windows
+
+I've tried it on Windows as well an given up. It requires *GNU Make*, which you can download from [Make from Windows](http://gnuwin32.sourceforge.net/packages/make.htm). However, it doesn't seem to have been properly adapted to Windows as the *make* line ``mkdir (dir $@)`` expands to ``mkdir obj/`` (with a Unix like forward slash) resulting in the error message ``The syntax of the command is incorrect.`` If you know how to write a cross-platform makefile, your help is welcome.
+
 
 ### Bare metal
 
