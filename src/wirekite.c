@@ -73,6 +73,13 @@ void check_usb_rx()
         if (rx_size < msg_size)
             break;
 
+        if (msg_size < 8) {
+            // oops?!
+            remainder_size = 0;
+            endp2_consume_rx_buffer();
+            return;
+        }
+
         handle_message(rx_buf);
 
         rx_buf += msg_size;
