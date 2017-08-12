@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -563,7 +563,7 @@ void endp1_handler(uint8_t stat)
             if (msg == NULL)
                 break;
             BDT(1, TX, endp1_odd).addr = msg;
-            BDT(1, TX, endp1_odd).desc = BD_OWNED_BY_USB(msg->messageSize, endp1_data);
+            BDT(1, TX, endp1_odd).desc = BD_OWNED_BY_USB(msg->message_size, endp1_data);
             endp1_data ^= 1;
             endp1_odd ^= 1;
         }
@@ -592,7 +592,7 @@ void endp1_tx_msg(wk_msg_header* msg) {
         endp1_append_buffer(msg);
     } else {
         BDT(1, TX, endp1_odd).addr = msg;
-        BDT(1, TX, endp1_odd).desc = BD_OWNED_BY_USB(msg->messageSize, endp1_data);
+        BDT(1, TX, endp1_odd).desc = BD_OWNED_BY_USB(msg->message_size, endp1_data);
         endp1_data ^= 1;
         endp1_odd ^= 1;
     }

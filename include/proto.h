@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -45,8 +45,8 @@ extern "C" {
 
 
 typedef struct {
-  uint16_t messageSize;
-  uint8_t messageType;
+  uint16_t message_size;
+  uint8_t message_type;
   uint8_t reserved0;
 } wk_msg_header;
 
@@ -54,44 +54,42 @@ typedef struct {
 typedef struct {
   wk_msg_header header;
   uint8_t action;
-  uint8_t portType;
-  union {
-    uint16_t portId;
-    uint16_t requestId;
-  };
-  uint16_t portAttributes;
-  uint16_t pinConfig;
+  uint8_t port_type;
+  uint16_t port_id;
+  uint16_t request_id;
+  uint16_t pin_config;
   uint32_t value1;
+  uint16_t port_attributes;
 } wk_config_request;
 
 
 typedef struct {
   wk_msg_header header;
   uint16_t result;
-  uint16_t portId;
-  uint16_t requestId;
+  uint16_t port_id;
+  uint16_t request_id;
   uint16_t optional1;
 } wk_config_response;
 
 
 typedef struct {
   wk_msg_header header;
-  uint16_t portId;
+  uint16_t port_id;
   uint8_t action;
-  uint8_t actionAttribute1;
-  uint16_t actionAttribute2;
-  uint16_t requestId;
-  uint8_t data[4]; // variable length, at leat 4 bytes
+  uint8_t action_attribute1;
+  uint16_t action_attribute2;
+  uint16_t request_id;
+  uint8_t data[4]; // variable length, at leat 1 bytes
 } wk_port_request;
 
 
 typedef struct {
   wk_msg_header header;
-  uint16_t portId;
+  uint16_t port_id;
   uint8_t event;
-  uint8_t eventAttribute1;
-  uint16_t requestId;
-  uint8_t data[4]; // variable length, at least 4 bytes
+  uint8_t event_attribute1;
+  uint16_t request_id;
+  uint8_t data[4]; // variable length, at least 1 bytes
 } wk_port_event;
 
 
