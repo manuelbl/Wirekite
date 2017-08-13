@@ -16,32 +16,27 @@
 #define PORT_C 2
 #define PORT_D 3
 #define PORT_E 4
-#define PORT_ENC(t)     (t << 4)
-#define PORT_IDX(n)     ((n >> 4) & 0x7)
 
-#define PIN_IDX_ENC(n)  | n
-#define PIN_IDX(n)      (n & 0xf)
+typedef struct {
+    uint16_t port : 3;
+    uint16_t pin : 5;
+    uint16_t alt : 3;
+    uint16_t timer: 2;
+    uint16_t channel : 3;
+} pin_map_t;
 
-#define ALT_ENC(a)      | (a << 8)
-#define ALT(n)          ((n >> 8) & 0x7)
-
-#define TIMER_IDX_ENC(t)    | (t << 11)
-#define TIMER_IDX(n)        ((n >> 11) & 0x3)
-
-#define CHAN_IDX_ENC(c)     | (c << 13)
-#define CHAN_IDX(n)         ((n >> 13) & 0x7)
-
-static uint16_t pin_map[] = {
-    PORT_ENC(PORT_A)  PIN_IDX_ENC(1)  ALT_ENC(3)  TIMER_IDX_ENC(2)  CHAN_IDX_ENC(0),   //  Pin 3    PTA1    TPM2_CH0
-    PORT_ENC(PORT_A)  PIN_IDX_ENC(2)  ALT_ENC(3)  TIMER_IDX_ENC(2)  CHAN_IDX_ENC(1),   //  Pin 4    PTA2    TPM2_CH1
-    PORT_ENC(PORT_D)  PIN_IDX_ENC(4)  ALT_ENC(4)  TIMER_IDX_ENC(0)  CHAN_IDX_ENC(4),   //  Pin 6    PTD4    TPM0_CH4
-    PORT_ENC(PORT_C)  PIN_IDX_ENC(3)  ALT_ENC(4)  TIMER_IDX_ENC(0)  CHAN_IDX_ENC(2),   //  Pin 9    PTC3    TPM0_CH2
-    PORT_ENC(PORT_C)  PIN_IDX_ENC(4)  ALT_ENC(4)  TIMER_IDX_ENC(0)  CHAN_IDX_ENC(3),   //  Pin 10   PTC4    TPM0_CH3
-    PORT_ENC(PORT_B)  PIN_IDX_ENC(0)  ALT_ENC(3)  TIMER_IDX_ENC(1)  CHAN_IDX_ENC(0),   //  Pin 16   PTB0    TPM1_CH0
-    PORT_ENC(PORT_B)  PIN_IDX_ENC(1)  ALT_ENC(3)  TIMER_IDX_ENC(1)  CHAN_IDX_ENC(1),   //  Pin 17   PTB1    TPM1_CH1
-    PORT_ENC(PORT_D)  PIN_IDX_ENC(5)  ALT_ENC(4)  TIMER_IDX_ENC(0)  CHAN_IDX_ENC(5),   //  Pin 20   PTD5    TPM0_CH5
-    PORT_ENC(PORT_C)  PIN_IDX_ENC(1)  ALT_ENC(4)  TIMER_IDX_ENC(0)  CHAN_IDX_ENC(0),   //  Pin 22   PTC1    TPM0_CH0
-    PORT_ENC(PORT_C)  PIN_IDX_ENC(2)  ALT_ENC(4)  TIMER_IDX_ENC(0)  CHAN_IDX_ENC(1)    //  Pin 23   PTC2    TPM0_CH1
+// PWM pin map of Teensy LC
+static pin_map_t pin_map[] = {
+    { PORT_A, 1, 3, 2, 0 },   //  Pin 3    PTA1    TPM2_CH0
+    { PORT_A, 2, 3, 2, 1 },   //  Pin 4    PTA2    TPM2_CH1
+    { PORT_D, 4, 4, 0, 4 },   //  Pin 6    PTD4    TPM0_CH4
+    { PORT_C, 3, 4, 0, 2 },   //  Pin 9    PTC3    TPM0_CH2
+    { PORT_C, 4, 4, 0, 3 },   //  Pin 10   PTC4    TPM0_CH3
+    { PORT_B, 0, 3, 1, 0 },   //  Pin 16   PTB0    TPM1_CH0
+    { PORT_B, 1, 3, 1, 1 },   //  Pin 17   PTB1    TPM1_CH1
+    { PORT_D, 5, 4, 0, 5 },   //  Pin 20   PTD5    TPM0_CH5
+    { PORT_C, 1, 4, 0, 0 },   //  Pin 22   PTC1    TPM0_CH0
+    { PORT_C, 2, 4, 0, 1 }    //  Pin 23   PTC2    TPM0_CH1
 };
 
 #define NUM_PINS (sizeof(pin_map)/sizeof(pin_map[0]))
@@ -64,9 +59,9 @@ static volatile uint32_t* PCR_ADDR[] = {
     &PORTE_PCR0
 };
 
-#define PCR(pin_info) (*(PCR_ADDR[PORT_IDX(pin_info)] + PIN_IDX(pin_info)))
+#define PCR(map) (*(PCR_ADDR[map.port] + map.pin))
 
-static uint16_t modulos[] = { 0, 0, 0};
+static uint16_t modulos[] = { 0, 0, 0 };
 static int16_t  values[NUM_PINS];
 
 
@@ -123,7 +118,7 @@ void pwm_timer_config(uint8_t timer, uint32_t frequency, uint16_t attributes)
 
     // recalculate values
     for (int i = 0; i < NUM_PINS; i++) {
-        if (values[i] != -1 && TIMER_IDX(pin_map[i]) == timer)
+        if (values[i] != -1 && pin_map[i].timer == timer)
             pwm_pin_set_value(i, values[i]);
     }
 }
@@ -150,8 +145,8 @@ pwm_pin pwm_pin_init(uint8_t pin)
 
     pwm_pin_set_value(pin, 0);
 
-    uint16_t pin_info = pin_map[pin];
-    PCR(pin_info) = PORT_PCR_MUX(ALT(pin_info)) | PORT_PCR_DSE | PORT_PCR_SRE;
+    pin_map_t map = pin_map[pin];
+    PCR(map) = PORT_PCR_MUX(map.alt) | PORT_PCR_DSE | PORT_PCR_SRE;
 
     return pin;
 }
@@ -165,8 +160,8 @@ void pwm_pin_release(pwm_pin port_id)
     pwm_pin_set_value(port_id, 0);
     values[port_id] = -1;
 
-    uint16_t pin_info = pin_map[port_id];
-    PCR(pin_info) = 0;
+    pin_map_t map = pin_map[port_id];
+    PCR(map) = 0;
 }
 
 
@@ -175,18 +170,18 @@ void pwm_pin_set_value(pwm_pin port_id, int16_t value)
     if (port_id >= NUM_PINS)
         return;
 
-    uint16_t pin_info = pin_map[port_id];
+    pin_map_t map = pin_map[port_id];
 
     // counter counts up to modulo + 1
     // input value is between 0 (0% duty cycle) and 32767 (100% duty cycle)
     uint32_t cval = 0;
     if (value != 0) {
-        uint16_t modulo = modulos[TIMER_IDX(pin_info)];
+        uint16_t modulo = modulos[map.timer];
         cval = ((uint32_t)value) * (((uint32_t)modulo) + 1) / 32767;
     }
     values[port_id] = cval;
 
-    volatile uint32_t* value_ptr = TPM_BASE_ADDR[TIMER_IDX(pin_info)] + 4 + 2 * CHAN_IDX(pin_info);
+    volatile uint32_t* value_ptr = TPM_BASE_ADDR[map.timer] + 4 + 2 * map.channel;
     *value_ptr = cval;
 }
 
