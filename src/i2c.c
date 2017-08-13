@@ -21,7 +21,7 @@
 #include "debug.h"
 
 
-#ifndef I2C_F_DIV52
+// Hopefully, these defines will be in kinetis.h one day...
 #define I2C_F_DIV52  ((uint8_t)0x43)
 #define I2C_F_DIV60  ((uint8_t)0x45)
 #define I2C_F_DIV136 ((uint8_t)0x4F)
@@ -29,7 +29,6 @@
 #define I2C_F_DIV352 ((uint8_t)0x95)
 #define I2C_FLT_SSIE    ((uint8_t)0x20)         // Start/Stop Interrupt Enable
 #define I2C_FLT_STARTF  ((uint8_t)0x10)         // Start Detect Flag
-#endif
 
 
 #define PORT_A 0
@@ -48,6 +47,7 @@ typedef struct {
     uint32_t sda_alt : 3;
 } port_map_t;
 
+// Pin/port mapping for Teensy LC
 static const port_map_t port_map[] = {
     { 0, PORT_B, PORT_B, 0, 1, 2, 2 },  // I2C0 pin 16/17 PTB0/PTB1
     { 0, PORT_B, PORT_B, 2, 3, 2, 2 },  // I2C0 pin 19/18 PTB2/PTB3
@@ -170,7 +170,7 @@ static void send_read_completion(i2c_port port, uint8_t status);
 
 void i2c_init()
 {
-
+    // nothing to do
 }
 
 void i2c_reset()
@@ -403,7 +403,7 @@ void i2c_isr_handler(uint8_t port)
             } else if (status & I2C_S_RXAK) {
                 pi->state = STATE_ERROR;
                 i2c->C1 = I2C_C1_IICEN; // reset to RX
-                completion_status = sub_state == SUB_STATE_ADDR ? I2C_STATUS_ADDR_NAK : I2C_STATUS_DATA_NAK;
+                completion_status = sub_state == I2C_STATUS_ADDR_NAK;
 
             // slave address transmitted
             } else {
@@ -485,19 +485,19 @@ void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency)
 {
     uint16_t target_div = (bus_rate + frequency / 2) / frequency;
 
-
     // binary search
-    uint8_t lower = 0;
-    uint8_t upper = NUM_F_DIVS;
+    int lower = 0;
+    int upper = NUM_F_DIVS;
     while (lower < upper) {
-        uint8_t mid = (upper - lower) / 2;
+        int mid = (upper + lower) / 2;
         if (freq_divs[mid].divider < target_div)
             lower = mid + 1;
         else
             upper = mid;
     }
 
-    uint8_t idx = lower;
+    // compare two closest results
+    int idx = lower;
     if (idx == NUM_F_DIVS)
         idx--;
     else if (idx >= 1 && target_div - freq_divs[idx-1].divider < freq_divs[idx].divider - target_div)

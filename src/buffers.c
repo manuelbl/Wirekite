@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -6,8 +6,10 @@
  */
 
 #include <string.h>
-#include "buffers.h"
 #include "kinetis.h"
+
+#include "buffers.h"
+
 
 typedef enum {
     BUF_FREE = 0,
@@ -20,13 +22,14 @@ static volatile buffer_state buffer_states[TX_NUM_BUFFERS];
 
 void buffers_init()
 {
-    memset((void*) buffer_states, 0, TX_NUM_BUFFERS * TX_BUFFER_SIZE);
+    // nothing to do
 }
 
-void* buffers_get_buf()
+void* buffers_alloc_buf()
 {
     uint8_t* buf = NULL;
 
+    // Search for next free buffer
     __disable_irq();
     for (int i = 0; i < TX_NUM_BUFFERS; i++) {
         if (buffer_states[i] == BUF_FREE) {
@@ -42,6 +45,7 @@ void* buffers_get_buf()
 
 void buffers_free_buf(void* buffer)
 {
+    // reconstruct index from buffer address
     int buffer_index = ((uint8_t*)buffer - buffers[0]) / TX_BUFFER_SIZE;
 
     __disable_irq();

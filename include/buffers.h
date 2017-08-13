@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -14,13 +14,20 @@
 extern "C" {
 #endif
 
+/*
+ * Poor man's memory management
+ * All allocated buffers are 64 byte.
+ */
+
 #define TX_BUFFER_SIZE 64
-#define TX_NUM_BUFFERS 4
+#define TX_NUM_BUFFERS 60
 
-
+// Initialize memory management
 void buffers_init();
 
-void* buffers_get_buf();
+// Allocate buffer
+void* buffers_alloc_buf();
+// Free buffer
 void buffers_free_buf(void* buffer);
 
 
