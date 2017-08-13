@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -42,6 +42,8 @@ extern "C" {
 #define DIGI_PIN_25 25
 #define DIGI_PIN_26 26
 #define DIGI_PIN_LED DIGI_PIN_13
+
+#define DIGI_PIN_ERROR 0xff
 
 #define DIGI_PIN_INPUT 0
 #define DIGI_PIN_OUTPUT 1
