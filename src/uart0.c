@@ -103,6 +103,15 @@ void uart0_write(const char* ptr, int32_t len)
 }
 
 
+void uart0_println(const char* ptr)
+{
+    for (int32_t i = 0; ptr[i]; i++)
+        uart_putchar((uint8_t)ptr[i]);
+    uart_putchar('\r');
+    uart_putchar('\n');
+}
+
+
 void uart0_flush()
 {
     while (is_transmitting)

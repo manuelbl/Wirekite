@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License

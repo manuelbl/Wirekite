@@ -115,7 +115,7 @@ static uint8_t device_desc[] = {
     ENDP0_PACKET_SIZE,  // bMaxPacketSize0 = 64 bytes
     0xc0, 0x16,         // idVendor = 16c0 // TODO
     0x01, 0x27,         // idProduct = 2701 // TODO
-    0x01, 0x00,         // bcdDevice = version 1
+    0x10, 0x00,         // bcdDevice = version 1
     1,                  // iManufacturer = string descriptor 1
     2,                  // iProduct = string descriptor 2
     3,                  // iSerialNumber = string descriptor 3
@@ -386,12 +386,12 @@ static void endp0_handle_setup(setup_t* packet)
     uint32_t size = 0;
     uint8_t index;
 
-    char debug[] = "setup xxxx\r\n";
+    char debug[] = "setup xxxx";
     bytes_to_hex(debug + 6, (uint8_t*) &packet->wRequestAndType, 2);
-    uart0_write(debug, 12);
+    uart0_println(debug);
 
-    char debug2[] = "set cfg xx\r\n";
-    char debug4[] = "get dsc xxxx xxxx\r\n";
+    char debug2[] = "set cfg xx";
+    char debug4[] = "get dsc xxxx xxxx";
 
     switch(packet->wRequestAndType) {
 
@@ -405,7 +405,7 @@ static void endp0_handle_setup(setup_t* packet)
         case 0x0681: // GET_DESCRIPTOR (endpoint)
             bytes_to_hex(debug4 + 8, (uint8_t*) &packet->wValue, 2);
             bytes_to_hex(debug4 + 13, (uint8_t*) &packet->wIndex, 2);
-            uart0_write(debug4, 19);
+            uart0_println(debug4);
 
             // check for serial number
             if (packet->wValue == 0x0303 && packet->wIndex == 0x0409) {
@@ -456,7 +456,7 @@ static void endp0_handle_setup(setup_t* packet)
                 goto stall;
             dev_configuration = packet->wValue;
             bytes_to_hex(debug2 + 8, &dev_configuration, 1);
-            uart0_write(debug2, 12);
+            uart0_println(debug2);
             dev_state = dev_configuration != 0 ? DEV_STATE_CONFIGURED : DEV_STATE_ADDRESS;
             usb_buffer_init(dev_configuration);
             endp0_data = 1;
@@ -515,7 +515,7 @@ send:
 
     // if we make it here, we are not able to send data and have stalled
 stall:
-    uart0_write("STALL\r\n", 7);
+    uart0_println("STALL");
     USB0_ENDPT0 = USB_ENDPT_EPSTALL | USB_ENDPT_EPRXEN | USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK;
 }
 
@@ -838,9 +838,9 @@ restart:
         uint8_t stat = USB0_STAT;
         uint8_t endpoint = stat >> 4;
 
-        char debug[] = "TOKDNE xx\r\n";
+        char debug[] = "TOKDNE xx";
         bytes_to_hex(debug + 7, &endpoint, 1);
-        uart0_write(debug, 11);
+        uart0_println(debug);
 
         if (endpoint == 0) {
             endp0_handler(stat);
@@ -856,7 +856,7 @@ restart:
 
     if (status & USB_ISTAT_USBRST) {
         //handle USB reset
-        uart0_write("USBRST\r\n", 8);
+        uart0_println("USBRST");
 
         //initialize endpoint 0 ping-pong buffers
         USB0_CTL |= USB_CTL_ODDRST;
@@ -880,14 +880,14 @@ restart:
     }
 
     if (status & USB_ISTAT_STALL) {
-        uart0_write("STALL\r\n", 7);
+        uart0_println("STALL");
         //handle usb stall
         USB0_ENDPT0 = USB_ENDPT_EPRXEN | USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK;
         USB0_ISTAT = USB_ISTAT_STALL;
     }
 
     if (status & USB_ISTAT_ERROR) {
-        uart0_write("ERROR\r\n", 7);
+        uart0_println("ERROR");
         //handle error
 		uint8_t err = USB0_ERRSTAT;
         USB0_ERRSTAT = err;

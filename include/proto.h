@@ -29,10 +29,13 @@ extern "C" {
 
 #define WK_PORT_ACTION_SET_VALUE 1
 #define WK_PORT_ACTION_GET_VALUE 2
+#define WK_PORT_ACTION_TX_DATA 3
+#define WK_PORT_ACTION_REQUEST_DATA 4
 
 #define WK_CFG_PORT_TYPE_DIGI_PIN 1
 #define WK_CFG_PORT_TYPE_ANALOG_IN 2
 #define WK_CFG_PORT_TYPE_PWM 3
+#define WK_CFG_PORT_TYPE_I2C 4
 
 #define WK_CFG_MODULE_PWM_TIMER 1
 #define WK_CFG_MODULE_PWM_CHANNEL 2
@@ -42,6 +45,8 @@ extern "C" {
 
 #define WK_EVENT_DODO 0
 #define WK_EVENT_SINGLE_SAMPLE 1
+#define WK_EVENT_TX_COMPLETE 2
+#define WK_EVENT_DATA_RECV 3
 
 
 typedef struct {
@@ -79,7 +84,7 @@ typedef struct {
   uint8_t action_attribute1;
   uint16_t action_attribute2;
   uint16_t request_id;
-  uint8_t data[4]; // variable length, at leat 1 bytes
+  uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_request;
 
 
@@ -88,8 +93,9 @@ typedef struct {
   uint16_t port_id;
   uint8_t event;
   uint8_t event_attribute1;
+  uint16_t event_attribute2;
   uint16_t request_id;
-  uint8_t data[4]; // variable length, at least 1 bytes
+  uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_event;
 
 

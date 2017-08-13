@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -9,7 +9,6 @@
 #include "pwm.h"
 #include "kinetis.h"
 #include "pwm_config.h"
-#include "uart.h"
 
 
 #define PORT_A 0

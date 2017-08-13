@@ -1,4 +1,4 @@
-/**
+/*
  * Wirekite - MCU code 
  * Copyright (c) 2017 Manuel Bleichenbacher
  * Licensed under MIT License
@@ -15,6 +15,7 @@
 #include "analog.h"
 #include "pwm.h"
 #include "util.h"
+#include "i2c.h"
 
 
 extern void uart_echo();
@@ -25,10 +26,11 @@ extern int main(void)
     buffers_init();
     analog_init();
     pwm_init();
+    i2c_init();
 
     uart0_init(115200);
     uart0_set_recv_evt(uart_echo);
-    uart0_write("START\r\n", 7);
+    uart0_println("START");
 
     // create serial number
     char serial_number[20];
@@ -39,11 +41,10 @@ extern int main(void)
     serial_number[12] = 0;
 
     usb_init(serial_number);
-    uart0_write("HELLO\r\n", 7);
 
     while (1) {
 
-        check_usb_rx();
+        wk_check_usb_rx();
         
     }
 }
