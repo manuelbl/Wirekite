@@ -74,7 +74,8 @@
             ],
             "defines": [
                 "__MKL26Z64__",
-                "F_CPU=48000000"
+                "F_CPU=48000000",
+                "_DEBUG"
             ],
             "intelliSenseMode": "clang-x64",
             "browse": {

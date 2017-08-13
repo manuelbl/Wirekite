@@ -6,11 +6,11 @@
  */
 
 #include <stddef.h>
-#include "usb.h"
 #include "kinetis.h"
-#include "uart.h"
-#include "util.h"
+
+#include "usb.h"
 #include "buffers.h"
+#include "debug.h"
 
 
 extern uint8_t wk_reset_flag;
@@ -386,12 +386,16 @@ static void endp0_handle_setup(setup_t* packet)
     uint32_t size = 0;
     uint8_t index;
 
+#ifdef _DEBUG
     char debug[] = "setup xxxx";
     bytes_to_hex(debug + 6, (uint8_t*) &packet->wRequestAndType, 2);
-    uart0_println(debug);
+    DEBUG_OUT(debug);
+#endif
 
+#ifdef _DEBUG
     char debug2[] = "set cfg xx";
     char debug4[] = "get dsc xxxx xxxx";
+#endif
 
     switch(packet->wRequestAndType) {
 
@@ -403,9 +407,11 @@ static void endp0_handle_setup(setup_t* packet)
 
         case 0x0680: // GET_DESCRIPTOR (device)
         case 0x0681: // GET_DESCRIPTOR (endpoint)
+#ifdef _DEBUG
             bytes_to_hex(debug4 + 8, (uint8_t*) &packet->wValue, 2);
             bytes_to_hex(debug4 + 13, (uint8_t*) &packet->wIndex, 2);
-            uart0_println(debug4);
+            DEBUG_OUT(debug4);
+#endif
 
             // check for serial number
             if (packet->wValue == 0x0303 && packet->wIndex == 0x0409) {
@@ -455,8 +461,10 @@ static void endp0_handle_setup(setup_t* packet)
             if (packet->wValue != 0 && packet->wValue != 1)
                 goto stall;
             dev_configuration = packet->wValue;
+#ifdef _DEBUG
             bytes_to_hex(debug2 + 8, &dev_configuration, 1);
-            uart0_println(debug2);
+            DEBUG_OUT(debug2);
+#endif
             dev_state = dev_configuration != 0 ? DEV_STATE_CONFIGURED : DEV_STATE_ADDRESS;
             usb_buffer_init(dev_configuration);
             endp0_data = 1;
@@ -515,7 +523,7 @@ send:
 
     // if we make it here, we are not able to send data and have stalled
 stall:
-    uart0_println("STALL");
+    DEBUG_OUT("STALL");
     USB0_ENDPT0 = USB_ENDPT_EPSTALL | USB_ENDPT_EPRXEN | USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK;
 }
 
@@ -838,9 +846,11 @@ restart:
         uint8_t stat = USB0_STAT;
         uint8_t endpoint = stat >> 4;
 
+#ifdef _DEBUG
         char debug[] = "TOKDNE xx";
         bytes_to_hex(debug + 7, &endpoint, 1);
-        uart0_println(debug);
+        DEBUG_OUT(debug);
+#endif
 
         if (endpoint == 0) {
             endp0_handler(stat);
@@ -856,7 +866,7 @@ restart:
 
     if (status & USB_ISTAT_USBRST) {
         //handle USB reset
-        uart0_println("USBRST");
+        DEBUG_OUT("USBRST");
 
         //initialize endpoint 0 ping-pong buffers
         USB0_CTL |= USB_CTL_ODDRST;
@@ -880,14 +890,14 @@ restart:
     }
 
     if (status & USB_ISTAT_STALL) {
-        uart0_println("STALL");
+        DEBUG_OUT("STALL");
         //handle usb stall
         USB0_ENDPT0 = USB_ENDPT_EPRXEN | USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK;
         USB0_ISTAT = USB_ISTAT_STALL;
     }
 
     if (status & USB_ISTAT_ERROR) {
-        uart0_println("ERROR");
+        DEBUG_OUT("ERROR");
         //handle error
 		uint8_t err = USB0_ERRSTAT;
         USB0_ERRSTAT = err;

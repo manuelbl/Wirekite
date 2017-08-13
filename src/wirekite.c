@@ -6,18 +6,18 @@
  */
 
 #include <string.h>
+#include "kinetis.h"
 
 #include "wirekite.h"
-#include "proto.h"
-#include "usb.h"
-#include "yield.h"
-#include "digital_pin.h"
 #include "analog.h"
 #include "buffers.h"
-#include "kinetis.h"
-#include "pwm.h"
+#include "digital_pin.h"
 #include "i2c.h"
-#include "uart.h"
+#include "proto.h"
+#include "pwm.h"
+#include "usb.h"
+#include "yield.h"
+#include "debug.h"
 
 
 uint8_t wk_reset_flag = 0;
@@ -97,7 +97,7 @@ void handle_message(uint8_t* msg)
     } else if (hdr->message_type == WK_MSG_TYPE_PORT_REQUEST) {
         handle_port_request((wk_port_request*)msg);
     } else {
-        uart0_println("Invalid msg");
+        DEBUG_OUT("Invalid msg");
     }
 }
 
@@ -153,7 +153,7 @@ void handle_config_request(wk_config_request* request)
             }
 
         } else if (request->action == WK_CFG_ACTION_RESET) {
-            uart0_println("RESET");
+            DEBUG_OUT("RESET");
             wk_reset();
         
         } else if (request->action == WK_CFG_ACTION_CONFIG_MODULE) {
@@ -165,7 +165,7 @@ void handle_config_request(wk_config_request* request)
             }
         
         } else {
-            uart0_println("Invalid config msg");
+            DEBUG_OUT("Invalid config msg");
         }
     }    
     
@@ -300,7 +300,7 @@ void adc0_isr()
  */
 void wk_reset()
 {
-    uart0_println("RST");
+    DEBUG_OUT("RST");
     digital_pin_reset();
     analog_reset();
     pwm_reset();

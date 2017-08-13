@@ -19,7 +19,10 @@
         "digital_pin.h": "c",
         "pwm.c": "c",
         "usb.h": "c",
-        "wirekite.h": "c"
+        "wirekite.h": "c",
+        "debug.h": "c",
+        "i2c.h": "c",
+        "uart.h": "c"
     },
     "C_Cpp.intelliSenseEngine": "Default"
 }

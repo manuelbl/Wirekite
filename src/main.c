@@ -6,16 +6,17 @@
  */
 
 #include "kinetis.h"
-#include "timer.h"
-#include "uart.h"
-#include "digital_pin.h"
-#include "usb.h"
-#include "wirekite.h"
-#include "buffers.h"
+
 #include "analog.h"
-#include "pwm.h"
-#include "util.h"
+#include "buffers.h"
+#include "digital_pin.h"
 #include "i2c.h"
+#include "pwm.h"
+#include "timer.h"
+#include "usb.h"
+#include "util.h"
+#include "wirekite.h"
+#include "debug.h"
 
 
 extern void uart_echo();
@@ -28,9 +29,11 @@ extern int main(void)
     pwm_init();
     i2c_init();
 
+#ifdef _DEBUG
     uart0_init(115200);
     uart0_set_recv_evt(uart_echo);
-    uart0_println("START");
+    DEBUG_OUT("START");
+#endif
 
     // create serial number
     char serial_number[20];
@@ -50,6 +53,7 @@ extern int main(void)
 }
 
 
+#ifdef _DEBUG
 void uart_echo()
 {
     char buf[1];
@@ -62,4 +66,4 @@ void uart_echo()
             break;
     }
 }
-
+#endif

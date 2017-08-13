@@ -14,11 +14,11 @@
 
 #include <string.h>
 #include "kinetis.h"
+
 #include "i2c.h"
 #include "dma.h"
-#include "util.h"
-#include "uart.h"
 #include "wirekite.h"
+#include "debug.h"
 
 
 #ifndef I2C_F_DIV52
@@ -175,13 +175,11 @@ void i2c_init()
 
 void i2c_reset()
 {
-    uart0_println("I2C reset start");
     for (int i = 0; i < NUM_I2C_PORTS; i++)
         if (port_info[i].state != STATE_INACTIVE)
             i2c_port_release(i);
 
     SIM_SCGC4 &= ~(SIM_SCGC4_I2C0 | SIM_SCGC4_I2C1);
-    uart0_println("I2C reset done");
 }
 
 i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
@@ -293,8 +291,6 @@ void i2c_master_start_send(wk_port_request* request)
     // enable interrupt and send address (for writing)
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
     i2c->D = (uint8_t)(request->action_attribute2 << 1);
-
-    uart0_println("i2c send started");
 }
 
 
@@ -325,9 +321,6 @@ void i2c_master_start_recv(wk_port_request* request)
     // enable interrupt and send address (for reading)
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
     i2c->D = (uint8_t)((request->action_attribute2 << 1) | 1);
-//    char dbg[] = "i2c ....";
-//    bytes_to_hex(dbg + 4, (uint8_t*)&pi->data_len, 2);
-//    uart0_println(dbg);
 }
 
 
@@ -418,7 +411,6 @@ void i2c_isr_handler(uint8_t port)
                 i2c->C1 = pi->data_len > 1 ? I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST
                                         : I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK; // set NAK
                 uint8_t __attribute__((unused)) data = i2c->D;
-    //            uart0_println("i2c recv addr");
             }
             
         // received byte
@@ -427,12 +419,10 @@ void i2c_isr_handler(uint8_t port)
             // second to last byte: set NAK
             if (pi->processed == pi->data_len - 2) {
                 i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK;
-                uart0_println("i2c recv 2nd last");
             }
                 
             // receive completed
             if (pi->processed == pi->data_len - 1) {
-                uart0_println("i2c recv complete");
                 i2c->C1 = I2C_C1_IICEN | I2C_C1_MST | I2C_C1_TX;
                 pi->data[pi->processed++] = i2c->D;
                 for (int i = 0; i < 20; i++) {
@@ -443,7 +433,6 @@ void i2c_isr_handler(uint8_t port)
                 
             // receive next byte
             } else {
-                uart0_write("R", 1);
                 pi->data[pi->processed++] = i2c->D;
             }
         }
@@ -452,7 +441,7 @@ void i2c_isr_handler(uint8_t port)
             send_read_completion(port, completion_status);    
     
     } else {
-        uart0_println("Spurious I2C interrupt");
+        DEBUG_OUT("Spurious I2C interrupt");
     }
 
     i2c->S = I2C_S_IICIF; // clear interrupt flag
