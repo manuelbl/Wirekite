@@ -6,8 +6,8 @@
  */
 
  /*
-  * This code heavily benefited from the Teensy I2C library (https://github.com/nox771/i2c_t3)
-  * by Brian (nox771).
+  * This code heavily benefited from the Teensy I2C library
+  * (https://github.com/nox771/i2c_t3) by Brian (nox771).
   *
   * Further sources: https://community.nxp.com/docs/DOC-330946
   */
@@ -164,8 +164,8 @@ static void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t freque
 static uint8_t acquire_bus(i2c_port port);
 //static void dma_i2c0_isr();
 //static void dma_i2c1_isr();
-static void send_write_completion(i2c_port port, uint8_t status);
-static void send_read_completion(i2c_port port, uint8_t status);
+static void send_write_completion(i2c_port port, uint8_t status, uint16_t len);
+static void send_read_completion(i2c_port port, uint8_t status, uint16_t len);
 
 
 void i2c_init()
@@ -269,7 +269,7 @@ void i2c_master_start_send(wk_port_request* request)
 
     // acquire bus
     if (acquire_bus(port) != 0) {
-        send_write_completion(port, I2C_STATUS_TIMEOUT);
+        send_write_completion(port, I2C_STATUS_TIMEOUT, 0);
         return;
     }
 
@@ -304,13 +304,14 @@ void i2c_master_start_recv(wk_port_request* request)
     i2c->FLT &= ~I2C_FLT_SSIE;
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
+    port_info_t* pi = &port_info[port];
+
     // acquire bus
     if (acquire_bus(port) != 0) {
-        send_read_completion(port, I2C_STATUS_TIMEOUT);
+        send_read_completion(port, I2C_STATUS_TIMEOUT, pi->processed);
         return;
     }
 
-    port_info_t* pi = &port_info[port];
     pi->state = STATE_RX;
     pi->sub_state = SUB_STATE_ADDR;
     pi->request_id = request->request_id;
@@ -384,7 +385,7 @@ void i2c_isr_handler(uint8_t port)
         }
 
         if (completion_status != 0xff)
-            send_write_completion(port, completion_status);    
+            send_write_completion(port, completion_status, pi->processed);    
 
     // master to slave receive
     } else if (pi->state == STATE_RX) {
@@ -438,7 +439,7 @@ void i2c_isr_handler(uint8_t port)
         }
 
         if (completion_status != 0xff)
-            send_read_completion(port, completion_status);    
+            send_read_completion(port, completion_status, pi->processed);    
     
     } else {
         DEBUG_OUT("Spurious I2C interrupt");
@@ -562,15 +563,15 @@ void i2c1_isr()
 }
 
 
-void send_write_completion(i2c_port port, uint8_t status)
+void send_write_completion(i2c_port port, uint8_t status, uint16_t len)
 {
     port_info_t* pi = &port_info[port];
-    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_TX_COMPLETE, pi->request_id, NULL, 0, status, 0);
+    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_TX_COMPLETE, pi->request_id, NULL, 0, status, len);
 }
 
 
-void send_read_completion(i2c_port port, uint8_t status)
+void send_read_completion(i2c_port port, uint8_t status, uint16_t len)
 {
     port_info_t* pi = &port_info[port];
-    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_DATA_RECV, pi->request_id, pi->data, pi->processed, status, 0);
+    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_DATA_RECV, pi->request_id, pi->data, pi->processed, status, len);
 }
