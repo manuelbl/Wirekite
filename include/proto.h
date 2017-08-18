@@ -84,6 +84,7 @@ typedef struct {
   uint8_t action_attribute1;
   uint16_t action_attribute2;
   uint16_t request_id;
+  uint32_t value1;
   uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_request;
 
@@ -95,6 +96,7 @@ typedef struct {
   uint8_t event_attribute1;
   uint16_t event_attribute2;
   uint16_t request_id;
+  uint32_t value1;
   uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_event;
 

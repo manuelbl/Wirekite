@@ -180,16 +180,15 @@ void handle_port_request(wk_port_request* request)
         uint16_t port_group = request->port_id & PORT_GROUP_MASK;
         if (request->action == WK_PORT_ACTION_SET_VALUE) {
             if (port_group == PORT_GROUP_DIGI_PIN) {
-                digital_pin_set_output(request->port_id & PORT_GROUP_DETAIL_MASK, request->data[0]);
+                digital_pin_set_output(request->port_id & PORT_GROUP_DETAIL_MASK, (uint8_t)request->value1);
             } else if (port_group == PORT_GROUP_PWM) {
-                int16_t* p = (int16_t*)&request->data;
-                pwm_pin_set_value(request->port_id & PORT_GROUP_DETAIL_MASK, *p);
+                pwm_pin_set_value(request->port_id & PORT_GROUP_DETAIL_MASK, (int16_t)request->value1);
             }
 
         } else if (request->action == WK_PORT_ACTION_GET_VALUE) {
             if (port_group == PORT_GROUP_DIGI_PIN) {
                 uint8_t value = digital_pin_get_input(request->port_id & PORT_GROUP_DETAIL_MASK);
-                wk_send_port_event(request->port_id, WK_EVENT_SINGLE_SAMPLE, request->request_id, &value, 1);
+                wk_send_port_event(request->port_id, WK_EVENT_SINGLE_SAMPLE, request->request_id, value);
 
             } else if (port_group == PORT_GROUP_ANALOG_IN) {
                 analog_request_conversion(request->port_id & PORT_GROUP_DETAIL_MASK);
@@ -227,24 +226,26 @@ void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id
 }
 
 
-void wk_send_port_event(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t* data, uint16_t data_len)
+void wk_send_port_event(uint16_t port_id, uint8_t evt, uint16_t request_id, uint32_t value)
 {
-    wk_send_port_event_2(port_id, evt, request_id, data, data_len, 0, 0);
+    wk_send_port_event_2(port_id, evt, request_id, 0, 0, value, NULL, 0);
 }
 
 
-void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t* data, uint16_t data_len, uint8_t attr1, uint16_t attr2)
+void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t attr1, uint16_t attr2, uint32_t value1, uint8_t* data, uint16_t data_len)
 {
-    wk_port_event* event = (wk_port_event*) mm_alloc(sizeof(wk_port_event) - 4 + data_len);
+    uint32_t msg_size = sizeof(wk_port_event) - 4 + data_len;
+    wk_port_event* event = (wk_port_event*) mm_alloc(msg_size);
     if (event == NULL)
         return; // drop data
 
-    event->header.message_size = sizeof(wk_port_event) - 4 + data_len;
+    event->header.message_size = msg_size;
     event->header.message_type = WK_MSG_TYPE_PORT_EVENT;
     event->port_id = port_id;
     event->event = evt;
     event->event_attribute1 = attr1;
     event->event_attribute2 = attr2;
+    event->value1 = value1;
     event->request_id = request_id;
     if (data_len > 0)
         memcpy(event->data, data, data_len);
@@ -272,7 +273,7 @@ void portcd_isr()
             break;
 
         uint8_t value = digital_pin_get_input(pin);
-        wk_send_port_event(PORT_GROUP_DIGI_PIN | pin, WK_EVENT_SINGLE_SAMPLE, 0, &value, 1);
+        wk_send_port_event(PORT_GROUP_DIGI_PIN | pin, WK_EVENT_SINGLE_SAMPLE, 0, value);
     }
 }
 
@@ -291,7 +292,7 @@ void adc0_isr()
     if (pin == ANALOG_PIN_CALIB_COMPLETE)
         return;
 
-    wk_send_port_event(PORT_GROUP_ANALOG_IN | pin, WK_EVENT_SINGLE_SAMPLE, 0, (uint8_t*)&value, 2);
+    wk_send_port_event(PORT_GROUP_ANALOG_IN | pin, WK_EVENT_SINGLE_SAMPLE, 0, value);
 }
 
 

@@ -26,8 +26,8 @@ extern "C" {
 
 
 void wk_check_usb_rx();
-void wk_send_port_event(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t* data, uint16_t data_len);
-void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t* data, uint16_t data_len, uint8_t attr1, uint16_t attr2);
+void wk_send_port_event(uint16_t port_id, uint8_t evt, uint16_t request_id, uint32_t value1);
+void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t attr1, uint16_t attr2, uint32_t value1, uint8_t* data, uint16_t data_len);
 
 
 #ifdef __cplusplus

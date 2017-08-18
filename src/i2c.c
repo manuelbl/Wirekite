@@ -315,8 +315,7 @@ void i2c_master_start_recv(wk_port_request* request)
     pi->state = STATE_RX;
     pi->sub_state = SUB_STATE_ADDR;
     pi->request_id = request->request_id;
-    uint16_t* data_len_ptr = (uint16_t*)&request->data[0];
-    pi->data_len = *data_len_ptr;
+    pi->data_len = (uint16_t)request->value1;
     pi->processed = 0;
 
     // enable interrupt and send address (for reading)
@@ -566,12 +565,12 @@ void i2c1_isr()
 void send_write_completion(i2c_port port, uint8_t status, uint16_t len)
 {
     port_info_t* pi = &port_info[port];
-    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_TX_COMPLETE, pi->request_id, NULL, 0, status, len);
+    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_TX_COMPLETE, pi->request_id, status, len, 0, NULL, 0);
 }
 
 
 void send_read_completion(i2c_port port, uint8_t status, uint16_t len)
 {
     port_info_t* pi = &port_info[port];
-    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_DATA_RECV, pi->request_id, pi->data, pi->processed, status, len);
+    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_DATA_RECV, pi->request_id, status, len, 0, pi->data, pi->processed);
 }
