@@ -199,9 +199,14 @@ void handle_port_request(wk_port_request* request)
                 i2c_master_start_send(request);
             }
 
-        } else if (request->action == WK_PORT_ACTION_REQUEST_DATA) {
+        } else if (request->action == WK_PORT_ACTION_RX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
                 i2c_master_start_recv(request);
+            }
+
+        } else if (request->action == WK_PORT_ACTION_TX_N_RX_DATA) {
+            if (port_group == PORT_GROUP_I2C) {
+                i2c_master_start_send(request);
             }
 
         }
