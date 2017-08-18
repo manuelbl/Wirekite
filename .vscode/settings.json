@@ -9,8 +9,6 @@
         "timer.c": "c",
         "proto.h": "c",
         "kinetis.c": "c",
-        "buffers.h": "c",
-        "buffers.c": "c",
         "yield.c": "c",
         "analog.h": "c",
         "analog_config.h": "c",
@@ -22,7 +20,9 @@
         "wirekite.h": "c",
         "debug.h": "c",
         "i2c.h": "c",
-        "uart.h": "c"
+        "uart.h": "c",
+        "string.h": "c",
+        "mem.h": "c"
     },
     "C_Cpp.intelliSenseEngine": "Default"
 }

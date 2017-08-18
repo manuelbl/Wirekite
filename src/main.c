@@ -5,10 +5,11 @@
  * https://opensource.org/licenses/MIT
  */
 
+#include <unistd.h>
 #include "kinetis.h"
 
 #include "analog.h"
-#include "buffers.h"
+#include "mem.h"
 #include "digital_pin.h"
 #include "i2c.h"
 #include "pwm.h"
@@ -24,7 +25,9 @@ void check_usb();
 
 extern int main(void)
 {
-    buffers_init();
+    void* heap = sbrk(3000);
+    mm_init(heap, 3000);
+
     analog_init();
     pwm_init();
     i2c_init();

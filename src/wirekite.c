@@ -10,7 +10,7 @@
 
 #include "wirekite.h"
 #include "analog.h"
-#include "buffers.h"
+#include "mem.h"
 #include "digital_pin.h"
 #include "i2c.h"
 #include "proto.h"
@@ -212,7 +212,7 @@ void handle_port_request(wk_port_request* request)
 
 void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1)
 {
-    wk_config_response* response = (wk_config_response*) buffers_alloc_buf();
+    wk_config_response* response = (wk_config_response*) mm_alloc(sizeof(wk_config_response));
     if (response == NULL)
         return; // drop data
 
@@ -235,7 +235,7 @@ void wk_send_port_event(uint16_t port_id, uint8_t evt, uint16_t request_id, uint
 
 void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t* data, uint16_t data_len, uint8_t attr1, uint16_t attr2)
 {
-    wk_port_event* event = (wk_port_event*) buffers_alloc_buf();
+    wk_port_event* event = (wk_port_event*) mm_alloc(sizeof(wk_port_event) - 4 + data_len);
     if (event == NULL)
         return; // drop data
 

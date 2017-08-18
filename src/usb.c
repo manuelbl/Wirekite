@@ -9,7 +9,7 @@
 #include "kinetis.h"
 
 #include "usb.h"
-#include "buffers.h"
+#include "mem.h"
 #include "debug.h"
 
 
@@ -532,6 +532,8 @@ stall:
  * Endpoint 1 handler
  */
 
+#define TX_NUM_BUFFERS 20
+
 static wk_msg_header* circ_tx_buf[TX_NUM_BUFFERS];
 static uint8_t circ_tx_head = 0;
 static uint8_t circ_tx_tail = 0;
@@ -562,7 +564,7 @@ void endp1_handler(uint8_t stat)
         break;
 
     case PID_IN: // TX
-        buffers_free_buf((void*) bdt->addr);
+        mm_free((void*) bdt->addr);
         bdt->addr = 0;
 
         __disable_irq();
@@ -631,7 +633,7 @@ void endp1_append_buffer(wk_msg_header* buf) {
         circ_tx_head = head;
     } else {
         // drop the buffer
-        buffers_free_buf(buf);
+        mm_free(buf);
     }
 }
 
@@ -802,14 +804,12 @@ void usb_buffer_init(uint8_t configuration)
     BDT(1, TX, ODD).addr = 0;
     BDT(1, TX, ODD).desc = 0;
 
-    __disable_irq();
     while (1) {
         void* buf = endp1_get_next_buffer();
         if (buf == NULL)
             break;
-        buffers_free_buf(buf);
+        mm_free(buf);
     }
-    __enable_irq();
 
     USB0_ENDPT1 = configuration == 1 ? USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK : 0;
 
