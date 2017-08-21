@@ -22,13 +22,14 @@
 
 uint8_t wk_reset_flag = 0;
 
-uint16_t remainder_size;
-uint8_t remainder_buf[512];
+static uint16_t partial_size;
+static uint16_t msg_size;
+static wk_msg_header* partial_msg;
 
 
 static void handle_config_request(wk_config_request* request);
-static void handle_port_request(wk_port_request* request);
-static void handle_message(uint8_t* msg);
+static void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg);
+static void handle_message(wk_msg_header* msg, uint8_t take_ownership);
 static void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1);
 static void wk_reset();
 
@@ -47,58 +48,74 @@ void wk_check_usb_rx()
     
     uint8_t* rx_buf = (uint8_t*) endp2_get_rx_buffer();
 
-    if (remainder_size > 0) {
-        wk_msg_header* hdr = (wk_msg_header*) remainder_buf;
-        uint16_t msg_size = hdr->message_size;
-        if (rx_size + remainder_size >= msg_size) {
-            uint16_t len = msg_size - remainder_size;
-            memcpy(remainder_buf + remainder_size, rx_buf, len);
-            handle_message(remainder_buf);
-            rx_size -= len;
-            rx_buf += len;
-            remainder_size = 0;
+    if (partial_size > 0) {
+        // there is a partial message from the last USB packet
+        uint16_t len = rx_size;
+        if (partial_size + len > msg_size)
+            len = msg_size - partial_size;
+        
+        // append to partial message (buffer is big enough)
+        if (partial_msg != NULL)
+            memcpy(((uint8_t*)partial_msg) + partial_size, rx_buf, len);
+        rx_buf += len;
+        rx_size -= len;
+        partial_size += len;
+
+        // if message is complete handle it
+        if (partial_size == msg_size) {
+            if (partial_msg != NULL)
+                handle_message(partial_msg, 1);
+            partial_size = 0;
+            msg_size = 0;
+            partial_msg = NULL;
         }
     }
 
     while (rx_size >= 2) {
 
         wk_msg_header* hdr = (wk_msg_header*) rx_buf;
-        uint16_t msg_size = hdr->message_size;
-        if (rx_size < msg_size)
+        uint16_t size = hdr->message_size;
+        if (rx_size < size)
             break;
 
-        if (msg_size < 8) {
+        if (size < 8) {
             // oops?!
-            remainder_size = 0;
             endp2_consume_rx_buffer();
             return;
         }
 
-        handle_message(rx_buf);
+        handle_message(hdr, 0);
 
-        rx_buf += msg_size;
-        rx_size -= msg_size;
+        rx_buf += size;
+        rx_size -= size;
     }
 
     if (rx_size > 0) {
-        memcpy(remainder_buf + remainder_size, rx_buf, rx_size);
-        remainder_size += rx_size;
+        // a partial message remains; allocate buffer
+        wk_msg_header* hdr = (wk_msg_header*) rx_buf;
+        msg_size = hdr->message_size;
+        partial_msg = (wk_msg_header*)mm_alloc(msg_size);
+        partial_size = rx_size;
+        if (partial_msg != NULL)
+            memcpy(partial_msg, rx_buf, rx_size);
     }
 
     endp2_consume_rx_buffer();
 }
 
 
-void handle_message(uint8_t* msg)
+void handle_message(wk_msg_header* msg, uint8_t take_ownership)
 {
-    wk_msg_header* hdr = (wk_msg_header*)msg;
-    if (hdr->message_type == WK_MSG_TYPE_CONFIG_REQUEST) {
+    uint8_t deallocate_msg = take_ownership;
+    if (msg->message_type == WK_MSG_TYPE_CONFIG_REQUEST) {
         handle_config_request((wk_config_request*)msg);
-    } else if (hdr->message_type == WK_MSG_TYPE_PORT_REQUEST) {
-        handle_port_request((wk_port_request*)msg);
+    } else if (msg->message_type == WK_MSG_TYPE_PORT_REQUEST) {
+        handle_port_request((wk_port_request*)msg, &deallocate_msg);
     } else {
         DEBUG_OUT("Invalid msg");
     }
+    if (deallocate_msg)
+        mm_free(msg);
 }
 
 
@@ -173,9 +190,9 @@ void handle_config_request(wk_config_request* request)
 }
 
 
-void handle_port_request(wk_port_request* request)
+void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
 {
-    if (request->header.message_size >= sizeof(wk_port_request) - 4) {
+    if (request->header.message_size >= WK_PORT_REQUEST_ALLOC_SIZE(0)) {
 
         uint16_t port_group = request->port_id & PORT_GROUP_MASK;
         if (request->action == WK_PORT_ACTION_SET_VALUE) {
@@ -196,7 +213,16 @@ void handle_port_request(wk_port_request* request)
 
         } else if (request->action == WK_PORT_ACTION_TX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
-                i2c_master_start_send(request);
+                if (*deallocate_msg) {
+                    // take ownership
+                    *deallocate_msg = 0;
+                } else {
+                    // cannot take ownership; make copy
+                    wk_port_request* request2 = (wk_port_request*)mm_alloc(request->header.message_size);
+                    memcpy(request2, request, request->header.message_size);
+                    request = request2;
+                }
+                i2c_master_start_send(request);                
             }
 
         } else if (request->action == WK_PORT_ACTION_RX_DATA) {
@@ -206,6 +232,15 @@ void handle_port_request(wk_port_request* request)
 
         } else if (request->action == WK_PORT_ACTION_TX_N_RX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
+                if (*deallocate_msg) {
+                    // take ownership
+                    *deallocate_msg = 0;
+                } else {
+                    // cannot take ownership; make copy
+                    wk_port_request* request2 = (wk_port_request*)mm_alloc(request->header.message_size);
+                    memcpy(request2, request, request->header.message_size);
+                    request = request2;
+                }
                 i2c_master_start_send(request);
             }
 
@@ -239,7 +274,7 @@ void wk_send_port_event(uint16_t port_id, uint8_t evt, uint16_t request_id, uint
 
 void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, uint8_t attr1, uint16_t attr2, uint32_t value1, uint8_t* data, uint16_t data_len)
 {
-    uint32_t msg_size = sizeof(wk_port_event) - 4 + data_len;
+    uint32_t msg_size = WK_PORT_EVENT_ALLOC_SIZE(data_len);
     wk_port_event* event = (wk_port_event*) mm_alloc(msg_size);
     if (event == NULL)
         return; // drop data

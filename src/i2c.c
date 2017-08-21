@@ -17,6 +17,8 @@
 
 #include "i2c.h"
 #include "dma.h"
+#include "mem.h"
+#include "usb.h"
 #include "wirekite.h"
 #include "debug.h"
 
@@ -147,13 +149,12 @@ typedef struct {
     uint8_t state;
     uint8_t sub_state;
     uint16_t processed;
-    uint8_t data[52];
-    uint16_t data_len;
+    union {
+        wk_port_request* request;
+        wk_port_event* response;
+    };
     uint8_t dma;
     uint8_t pins;
-    uint16_t request_id;
-    uint16_t rx_size;
-    uint16_t slave_addr;
 } port_info_t;
 
 #define NUM_I2C_PORTS 2
@@ -164,11 +165,13 @@ static port_info_t port_info[NUM_I2C_PORTS];
 static KINETIS_I2C_t* get_i2c_ctrl(i2c_port port);
 static void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency);
 static uint8_t acquire_bus(i2c_port port);
-static void i2c_master_start_recv_2(i2c_port port);
+static wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size);
+static void switch_to_recv(i2c_port port);
+static void master_start_recv_2(i2c_port port, uint16_t slave_addr);
 //static void dma_i2c0_isr();
 //static void dma_i2c1_isr();
-static void send_write_completion(i2c_port port, uint8_t status, uint16_t len);
-static void send_read_completion(i2c_port port, uint8_t status, uint16_t len);
+static void write_complete(i2c_port port, uint8_t status, uint16_t len);
+static void read_complete(i2c_port port, uint8_t status, uint16_t len);
 
 
 void i2c_init()
@@ -262,6 +265,7 @@ void i2c_port_reset(i2c_port port)
 
 void i2c_master_start_send(wk_port_request* request)
 {
+    // Take ownership of request; release it when the transmission is done
     i2c_port port = request->port_id;
 
     // reset flags
@@ -272,19 +276,16 @@ void i2c_master_start_send(wk_port_request* request)
 
     // acquire bus
     if (acquire_bus(port) != 0) {
-        send_write_completion(port, I2C_STATUS_TIMEOUT, 0);
+        write_complete(port, I2C_STATUS_TIMEOUT, 0);
         return;
     }
 
+    // initialize state
     port_info_t* pi = &port_info[port];
     pi->state = STATE_TX;
     pi->sub_state = SUB_STATE_ADDR;
-    pi->request_id = request->request_id;
-    pi->data_len = request->header.message_size - sizeof(wk_port_request) + 4;
-    memcpy(pi->data, request->data, pi->data_len);
+    pi->request = request;
     pi->processed = 0;
-    pi->rx_size = request->action == WK_PORT_ACTION_TX_N_RX_DATA ? request->value1 : 0;
-    pi->slave_addr = request->action_attribute2;
 
     /*
     // setup DMA
@@ -295,20 +296,20 @@ void i2c_master_start_send(wk_port_request* request)
 
     // enable interrupt and send address (for writing)
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
-    i2c->D = (uint8_t)(pi->slave_addr << 1);
+    i2c->D = (uint8_t)(request->action_attribute2 << 1);
 }
 
 
 void i2c_master_start_recv(wk_port_request* request)
 {
     i2c_port port = request->port_id;
-
-    // copy request information into own struct
-    port_info_t* pi = &port_info[port];
-    pi->request_id = request->request_id;
-    pi->rx_size = (uint16_t)request->value1;
-    pi->slave_addr = request->action_attribute2;
     
+    // allocate response with RX buffer
+    port_info_t* pi = &port_info[port];
+    pi->response = create_response(request->port_id, request->request_id, (uint16_t)request->value1);
+    if (pi->response == NULL)
+        return;
+
     // reset flags
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
     i2c->FLT |= I2C_FLT_STOPF | I2C_FLT_STARTF;
@@ -316,29 +317,71 @@ void i2c_master_start_recv(wk_port_request* request)
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
     // start receive
-    i2c_master_start_recv_2(port);
+    master_start_recv_2(port, request->action_attribute2);
 }
 
 
-void i2c_master_start_recv_2(i2c_port port)
+// Switch from transmitting to receiving
+void switch_to_recv(i2c_port port)
+{
+    port_info_t* pi = &port_info[port];
+    wk_port_request* request = pi->request;
+
+    // retain relevant data
+    uint16_t port_id = request->port_id;
+    uint16_t request_id = request->request_id;
+    uint16_t rx_size = (uint16_t)request->value1;
+    uint16_t slave_addr = request->action_attribute2;
+
+    // free request with transmit data
+    mm_free(request);
+
+    // allocate response with RX buffer
+    pi->response = create_response(port_id, request_id, rx_size);
+    if (pi->response == NULL)
+        return;
+    
+    master_start_recv_2(port, slave_addr);
+}
+
+
+wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size)
+{
+    // allocate response message and copy data
+    uint16_t msg_size = WK_PORT_EVENT_ALLOC_SIZE(rx_size);
+    wk_port_event* response = mm_alloc(msg_size);
+    if (response == NULL) {
+        wk_send_port_event_2(port_id, WK_EVENT_DATA_RECV, request_id, I2C_OUT_OF_MEMORY, 0, 0, NULL, 0);
+        return NULL;
+    }
+        
+    response->header.message_size = msg_size;
+    response->header.message_type = WK_MSG_TYPE_PORT_EVENT;
+    response->port_id = port_id;
+    response->request_id = request_id;
+    response->event = WK_EVENT_DATA_RECV;
+    return response;
+}
+
+
+void master_start_recv_2(i2c_port port, uint16_t slave_addr)
 {
     // initialize state
     port_info_t* pi = &port_info[port];
-    pi->data_len = pi->rx_size;
     pi->state = STATE_RX;
     pi->sub_state = SUB_STATE_ADDR;
     pi->processed = 0;
 
     // acquire bus
     if (acquire_bus(port) != 0) {
-        send_read_completion(port, I2C_STATUS_TIMEOUT, 0);
+        read_complete(port, I2C_STATUS_TIMEOUT, 0);
         return;
     }
 
     // enable interrupt and send address (for reading)
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
-    i2c->D = (uint8_t)((pi->slave_addr << 1) | 1);
+    i2c->D = (uint8_t)((slave_addr << 1) | 1);
 }
 
 
@@ -375,7 +418,7 @@ void i2c_isr_handler(uint8_t port)
                 //i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX | I2C_C1_DMAEN; // enable DMA
                 //dma_enable(pi->dma);
                 pi->sub_state = SUB_STATE_DATA;
-                i2c->D = pi->data[0];
+                i2c->D = pi->request->data[0];
 
             /*
             // DMA has finished sending second to last byte
@@ -387,33 +430,34 @@ void i2c_isr_handler(uint8_t port)
             */
 
             // transmission complete
-            } else if (pi->processed == pi->data_len - 1) {
+            } else if (pi->processed == WK_PORT_REQUEST_DATA_LEN(pi->request) - 1) {
                 pi->processed++;
-                pi->state = STATE_WAITING;
-                if (pi->rx_size == 0) {
+                if (pi->request->action == WK_PORT_ACTION_TX_DATA) {
                     i2c->C1 = I2C_C1_IICEN; // reset to RX
                     completion_status = I2C_STATUS_OK;
                 } else {
                     // continue receiving data
                     i2c->S = I2C_S_IICIF; // clear interrupt flag
-                    i2c_master_start_recv_2(port);
+                    switch_to_recv(port);
                     return;
                 }
 
             // transmit next byte
             } else {
                 pi->processed++;
-                i2c->D = pi->data[pi->processed];
+                i2c->D = pi->request->data[pi->processed];
             }
         
         }
 
         if (completion_status != 0xff)
-            send_write_completion(port, completion_status, pi->processed);    
+            write_complete(port, completion_status, pi->processed);    
 
     // master to slave receive
     } else if (pi->state == STATE_RX) {
 
+        uint16_t data_len = WK_PORT_EVENT_DATA_LEN(pi->request);
+        
         // address transmitted
         if (sub_state == SUB_STATE_ADDR) {
 
@@ -433,24 +477,26 @@ void i2c_isr_handler(uint8_t port)
             // slave address transmitted
             } else {
                 pi->sub_state = SUB_STATE_DATA;
-                i2c->C1 = pi->data_len > 1 ? I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST
-                                        : I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK; // set NAK
-                uint8_t __attribute__((unused)) data = i2c->D;
+                i2c->C1 = data_len > 1
+                    ? I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST
+                    : I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK; // set NAK
+                uint8_t __attribute__((unused)) data = i2c->D; // dummy read (see chip manual, I2C interrupt routine)
             }
             
         // received byte
         } else {
 
             // second to last byte: set NAK
-            if (pi->processed == pi->data_len - 2) {
+            if (pi->processed == data_len - 2) {
                 i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK;
             }
                 
             // receive completed
-            if (pi->processed == pi->data_len - 1) {
+            if (pi->processed == data_len - 1) {
                 i2c->C1 = I2C_C1_IICEN | I2C_C1_MST | I2C_C1_TX;
-                pi->data[pi->processed++] = i2c->D;
-                for (int i = 0; i < 20; i++) {
+                pi->request->data[pi->processed++] = i2c->D;
+                // complete bit
+                for (int i = 0; i < 20; i++) { // TODO
                     __asm__ volatile ("nop");
                 }
                 i2c->C1 = I2C_C1_IICEN;
@@ -458,12 +504,12 @@ void i2c_isr_handler(uint8_t port)
                 
             // receive next byte
             } else {
-                pi->data[pi->processed++] = i2c->D;
+                pi->request->data[pi->processed++] = i2c->D;
             }
         }
 
         if (completion_status != 0xff)
-            send_read_completion(port, completion_status, pi->processed);    
+            read_complete(port, completion_status, pi->processed);    
     
     } else {
         DEBUG_OUT("Spurious I2C interrupt");
@@ -587,15 +633,35 @@ void i2c1_isr()
 }
 
 
-void send_write_completion(i2c_port port, uint8_t status, uint16_t len)
+void write_complete(i2c_port port, uint8_t status, uint16_t len)
 {
+    // save relevant values
     port_info_t* pi = &port_info[port];
-    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_TX_COMPLETE, pi->request_id, status, len, 0, NULL, 0);
+    uint16_t port_id = pi->request->port_id;
+    uint16_t request_id = pi->request->request_id;
+
+    // free request
+    mm_free(pi->request);
+    pi->request = NULL;
+    pi->state = STATE_WAITING;
+
+    // send completion message
+    wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
 }
 
 
-void send_read_completion(i2c_port port, uint8_t status, uint16_t len)
+void read_complete(i2c_port port, uint8_t status, uint16_t len)
 {
+    // fill in additional values
     port_info_t* pi = &port_info[port];
-    wk_send_port_event_2(PORT_GROUP_I2C | port, WK_EVENT_DATA_RECV, pi->request_id, status, len, 0, pi->data, pi->processed);
+    pi->response->event_attribute1 = status;
+    pi->response->event_attribute2 = len;
+    pi->response->header.message_size = WK_PORT_EVENT_ALLOC_SIZE(pi->processed);
+
+    // send response
+    endp1_tx_msg(&pi->response->header);
+
+    // clean up
+    pi->response = NULL;
+    pi->state = STATE_WAITING;
 }

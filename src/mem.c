@@ -93,6 +93,7 @@ void* mm_alloc(uint32_t size)
     }
 
     __enable_irq();
+    memset(p + 1, 0, required_size - 4);
     return p + 1;
 }
 

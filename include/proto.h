@@ -89,6 +89,9 @@ typedef struct {
   uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_request;
 
+#define WK_PORT_REQUEST_ALLOC_SIZE(data_len) ((uint16_t)(sizeof(wk_port_request) - 4 + data_len))
+#define WK_PORT_REQUEST_DATA_LEN(request) ((uint16_t)((request)->header.message_size - sizeof(wk_port_request) + 4))
+
 
 typedef struct {
   wk_msg_header header;
@@ -100,6 +103,9 @@ typedef struct {
   uint32_t value1;
   uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_event;
+
+#define WK_PORT_EVENT_ALLOC_SIZE(data_len) ((uint16_t)(sizeof(wk_port_event) - 4 + data_len))
+#define WK_PORT_EVENT_DATA_LEN(event) ((uint16_t)((event)->header.message_size - sizeof(wk_port_event) + 4))
 
 
 #ifdef __cplusplus

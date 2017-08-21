@@ -30,6 +30,7 @@ extern "C" {
 #define I2C_STATUS_ARB_LOST 2
 #define I2C_STATUS_ADDR_NAK 3
 #define I2C_STATUS_DATA_NAK 4
+#define I2C_OUT_OF_MEMORY 5
 
 
 typedef uint8_t i2c_port;
@@ -41,7 +42,9 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency);
 void i2c_port_release(i2c_port port);
 void i2c_port_reset(i2c_port port);
 
+// Always takes ownership of the request
 void i2c_master_start_send(wk_port_request* request);
+// Does not take ownership of the request
 void i2c_master_start_recv(wk_port_request* request);
 
 
