@@ -50,6 +50,15 @@ void wk_check_usb_rx()
 
     if (partial_size > 0) {
         // there is a partial message from the last USB packet
+
+        if (partial_size == 1) {
+            // super special case: only half of the first word
+            // was transmitted
+            msg_size += ((uint16_t)rx_buf[0]) << 8;
+            partial_msg = (wk_msg_header*)mm_alloc(msg_size);
+            partial_msg->message_size = msg_size;
+        }
+
         uint16_t len = rx_size;
         if (partial_size + len > msg_size)
             len = msg_size - partial_size;
@@ -91,13 +100,23 @@ void wk_check_usb_rx()
     }
 
     if (rx_size > 0) {
-        // a partial message remains; allocate buffer
-        wk_msg_header* hdr = (wk_msg_header*) rx_buf;
-        msg_size = hdr->message_size;
-        partial_msg = (wk_msg_header*)mm_alloc(msg_size);
-        partial_size = rx_size;
-        if (partial_msg != NULL)
-            memcpy(partial_msg, rx_buf, rx_size);
+        // a partial message remains
+        
+        if (rx_size == 1) {
+            // super special case: only 1 byte was transmitted;
+            // we don't know the size of the message
+            partial_size = 1;
+            msg_size = rx_buf[0];
+
+        } else {
+            // allocate buffer
+            wk_msg_header* hdr = (wk_msg_header*) rx_buf;
+            msg_size = hdr->message_size;
+            partial_msg = (wk_msg_header*)mm_alloc(msg_size);
+            partial_size = rx_size;
+            if (partial_msg != NULL)
+                memcpy(partial_msg, rx_buf, rx_size);
+        }
     }
 
     endp2_consume_rx_buffer();

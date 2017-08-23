@@ -145,6 +145,9 @@ static const freq_div_t freq_divs[] = {
 #define SUB_STATE_DATA 1
 
 
+#define CIRC_QUEUE_SIZE 12
+
+
 typedef struct {
     uint8_t state;
     uint8_t sub_state;
@@ -153,6 +156,9 @@ typedef struct {
         wk_port_request* request;
         wk_port_event* response;
     };
+    wk_port_request* circ_request_buf[CIRC_QUEUE_SIZE];
+    uint8_t circ_request_head;
+    uint8_t circ_request_tail;
     uint8_t dma;
     uint8_t pins;
 } port_info_t;
@@ -162,16 +168,21 @@ typedef struct {
 static port_info_t port_info[NUM_I2C_PORTS];
 
 
+static void master_start_send_2(wk_port_request* request);
+static void master_start_recv_2(wk_port_request* request);
 static KINETIS_I2C_t* get_i2c_ctrl(i2c_port port);
 static void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency);
 static uint8_t acquire_bus(i2c_port port);
 static wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size);
 static void switch_to_recv(i2c_port port);
-static void master_start_recv_2(i2c_port port, uint16_t slave_addr);
+static void master_start_recv_3(i2c_port port, uint16_t slave_addr);
 //static void dma_i2c0_isr();
 //static void dma_i2c1_isr();
 static void write_complete(i2c_port port, uint8_t status, uint16_t len);
 static void read_complete(i2c_port port, uint8_t status, uint16_t len);
+wk_port_request* get_next_request(i2c_port port);
+uint8_t append_request(i2c_port port, wk_port_request* msg);
+void clear_request_queue(i2c_port port);
 
 
 void i2c_init()
@@ -247,25 +258,48 @@ void i2c_port_release(i2c_port port)
     if (port_info[port].state == STATE_INACTIVE)
         return;
     
+    __disable_irq();
+    port_info[port].state = STATE_INACTIVE;
+    
     //dma_release_channel(port_info[port].dma);
 
     uint8_t pins = port_info[port].pins;
     PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = 0;
     PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = 0;
 
-    port_info[port].state = STATE_INACTIVE;
+    clear_request_queue(port);
+    __enable_irq();
 }
 
 
 void i2c_port_reset(i2c_port port)
 {
-
+    // TODO
 }
 
 
 void i2c_master_start_send(wk_port_request* request)
 {
-    // Take ownership of request; release it when the transmission is done
+    // take ownership of request; release it when the transmission is done
+    i2c_port port = request->port_id;
+
+    // if I2C port busy then queue request
+    if (port_info[port].state != STATE_WAITING) {
+        __disable_irq();
+        uint8_t success = append_request(port, request);
+        __enable_irq();
+        if (!success)
+            mm_free(request);
+        return;
+    }
+
+    master_start_send_2(request);
+}
+
+
+void master_start_send_2(wk_port_request* request)
+{
+    // take ownership of request; release it when the transmission is done
     i2c_port port = request->port_id;
 
     // reset flags
@@ -304,6 +338,31 @@ void i2c_master_start_recv(wk_port_request* request)
 {
     i2c_port port = request->port_id;
     
+    // if port is busy copy the request and queue it
+    if (port_info[port].state != STATE_WAITING) {
+
+        wk_port_request* copy = mm_alloc(request->header.message_size);
+        if (copy == NULL)
+            return;
+        
+        memcpy(copy, request, request->header.message_size);
+
+        __disable_irq();
+        uint8_t success = append_request(port, copy);
+        __enable_irq();
+        if (!success)
+            mm_free(copy);
+        return;
+    }
+
+    master_start_recv_2(request);
+}
+
+
+void master_start_recv_2(wk_port_request* request)
+{
+    i2c_port port = request->port_id;
+    
     // allocate response with RX buffer
     port_info_t* pi = &port_info[port];
     pi->response = create_response(request->port_id, request->request_id, (uint16_t)request->value1);
@@ -317,7 +376,7 @@ void i2c_master_start_recv(wk_port_request* request)
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
     // start receive
-    master_start_recv_2(port, request->action_attribute2);
+    master_start_recv_3(port, request->action_attribute2);
 }
 
 
@@ -341,7 +400,47 @@ void switch_to_recv(i2c_port port)
     if (pi->response == NULL)
         return;
     
-    master_start_recv_2(port, slave_addr);
+    master_start_recv_3(port, slave_addr);
+}
+
+
+void master_start_recv_3(i2c_port port, uint16_t slave_addr)
+{
+    // initialize state
+    port_info_t* pi = &port_info[port];
+    pi->state = STATE_RX;
+    pi->sub_state = SUB_STATE_ADDR;
+    pi->processed = 0;
+
+    // acquire bus
+    if (acquire_bus(port) != 0) {
+        read_complete(port, I2C_STATUS_TIMEOUT, 0);
+        return;
+    }
+
+    // enable interrupt and send address (for reading)
+    KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
+    i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
+    i2c->D = (uint8_t)((slave_addr << 1) | 1);
+}
+
+
+// check for pending request in queue
+void check_queue(i2c_port port)
+{
+    __disable_irq();
+    wk_port_request* request = get_next_request(port);
+    __enable_irq();
+
+    if (request == NULL)
+        return;
+
+    if (request->action == WK_PORT_ACTION_RX_DATA) {
+        master_start_recv_2(request);
+        mm_free(request);
+    } else {
+        master_start_send_2(request);
+    }
 }
 
 
@@ -361,27 +460,6 @@ wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t r
     response->request_id = request_id;
     response->event = WK_EVENT_DATA_RECV;
     return response;
-}
-
-
-void master_start_recv_2(i2c_port port, uint16_t slave_addr)
-{
-    // initialize state
-    port_info_t* pi = &port_info[port];
-    pi->state = STATE_RX;
-    pi->sub_state = SUB_STATE_ADDR;
-    pi->processed = 0;
-
-    // acquire bus
-    if (acquire_bus(port) != 0) {
-        read_complete(port, I2C_STATUS_TIMEOUT, 0);
-        return;
-    }
-
-    // enable interrupt and send address (for reading)
-    KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
-    i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
-    i2c->D = (uint8_t)((slave_addr << 1) | 1);
 }
 
 
@@ -450,6 +528,8 @@ void i2c_isr_handler(uint8_t port)
         
         }
 
+        i2c->S = I2C_S_IICIF; // clear interrupt flag
+
         if (completion_status != 0xff)
             write_complete(port, completion_status, pi->processed);    
 
@@ -508,14 +588,15 @@ void i2c_isr_handler(uint8_t port)
             }
         }
 
+        i2c->S = I2C_S_IICIF; // clear interrupt flag
+        
         if (completion_status != 0xff)
             read_complete(port, completion_status, pi->processed);    
     
     } else {
+        i2c->S = I2C_S_IICIF; // clear interrupt flag
         DEBUG_OUT("Spurious I2C interrupt");
     }
-
-    i2c->S = I2C_S_IICIF; // clear interrupt flag
 }
 
 
@@ -647,6 +728,8 @@ void write_complete(i2c_port port, uint8_t status, uint16_t len)
 
     // send completion message
     wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
+
+    check_queue(port);
 }
 
 
@@ -664,4 +747,51 @@ void read_complete(i2c_port port, uint8_t status, uint16_t len)
     // clean up
     pi->response = NULL;
     pi->state = STATE_WAITING;
+
+    check_queue(port);
 }
+
+
+// --- TX queue
+
+
+wk_port_request* get_next_request(i2c_port port)
+{    
+    port_info_t* pi = &port_info[port];
+    if (pi->circ_request_head == pi->circ_request_tail)
+        return NULL;
+    
+    pi->circ_request_tail++;
+    if (pi->circ_request_tail >= CIRC_QUEUE_SIZE)
+        pi->circ_request_tail = 0;
+    
+    return pi->circ_request_buf[pi->circ_request_tail];
+}
+
+
+uint8_t append_request(i2c_port port, wk_port_request* request)
+{
+    port_info_t* pi = &port_info[port];
+    uint8_t head = pi->circ_request_head + 1;
+    if (head >= CIRC_QUEUE_SIZE)
+        head = 0;
+    if (head != pi->circ_request_tail) {
+        pi->circ_request_buf[head] = request;
+        pi->circ_request_head = head;
+        return 1;
+    }
+    
+    return 0; // failed (queue full)
+}
+
+
+void clear_request_queue(i2c_port port)
+{
+    while (1) {
+        wk_port_request* request = get_next_request(port);
+        if (request == NULL)
+            break;
+        mm_free(request);
+    }
+}
+    
