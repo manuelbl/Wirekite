@@ -34,11 +34,9 @@ extern uint8_t wk_reset_flag;
 //determines an appropriate BDT index for the given conditions (see fig. 41-3)
 #define RX 0
 #define TX 1
-#define EVEN 0
-#define ODD  1
-#define BDT(endpoint, tx, odd) (bdt_table[(endpoint << 2) | (tx << 1) | odd])
+#define BDT(endpoint, tx, idx) (bdt_table[(endpoint << 2) | (tx << 1) | idx])
 #define STAT_TO_BDT(stat) (bdt_table[stat >> 2])
-#define STAT_IS_ODD(stat) ((stat >> 2) & 1)
+#define STAT_BDT_IDX(stat) ((stat >> 2) & 1)
 
 #define DATA0 0
 #define DATA1 1
@@ -286,7 +284,7 @@ static volatile uint8_t reply_buffer[8] __attribute__ ((aligned (4)));
 
 
 static volatile uint8_t endp0_rx[2][ENDP0_PACKET_SIZE] __attribute__ ((aligned (4)));
-static uint8_t endp0_odd = 0;
+static uint8_t endp0_bdt_idx = 0;
 static uint8_t endp0_data = 0;
 static volatile const uint8_t* endp0_tx_dataptr = NULL; // pointer to current transmit chunk
 static uint16_t endp0_tx_datalen = 0; // length of data remaining to send
@@ -318,8 +316,8 @@ void endp0_handler(uint8_t stat)
         bdt->desc = BD_OWNED_BY_USB(ENDP0_PACKET_SIZE, 1);
 
         // clear any pending IN stuff
-        BDT(0, TX, EVEN).desc = 0;
-		BDT(0, TX, ODD).desc = 0;
+        BDT(0, TX, 0).desc = 0;
+		BDT(0, TX, 1).desc = 0;
         endp0_data = 1;
 
         // cast the data into our setup type and run the setup
@@ -369,10 +367,10 @@ void endp0_handler(uint8_t stat)
  */
 static void endp0_transmit(volatile const void* data, uint16_t length)
 {
-    BDT(0, TX, endp0_odd).addr = (void *)data;
-    BDT(0, TX, endp0_odd).desc = BD_OWNED_BY_USB(length, endp0_data);
-    // toggle the odd and data bits
-    endp0_odd ^= 1;
+    BDT(0, TX, endp0_bdt_idx).addr = (void *)data;
+    BDT(0, TX, endp0_bdt_idx).desc = BD_OWNED_BY_USB(length, endp0_data);
+    // toggle the index (even/odd) and data bits
+    endp0_bdt_idx ^= 1;
     endp0_data ^= 1;
 }
 
@@ -538,7 +536,7 @@ stall:
 static wk_msg_header* circ_tx_buf[TX_NUM_BUFFERS];
 static uint8_t circ_tx_head;
 static uint8_t circ_tx_tail;
-static uint8_t endp1_odd;
+static uint8_t endp1_bdt_idx;
 static uint8_t endp1_data;
 static uint8_t* partial_msg;
 static uint16_t partial_msg_size;
@@ -564,14 +562,14 @@ void endp1_handler(uint8_t stat)
 
     case PID_IN: // TX
         __disable_irq();
-        uint8_t is_odd = STAT_IS_ODD(stat);
-        if (msg_free_addr[is_odd] != NULL) {
-            mm_free(msg_free_addr[is_odd]);
-            msg_free_addr[is_odd] = NULL;
+        uint8_t bdt_idx = STAT_BDT_IDX(stat);
+        if (msg_free_addr[bdt_idx] != NULL) {
+            mm_free(msg_free_addr[bdt_idx]);
+            msg_free_addr[bdt_idx] = NULL;
         }
         bdt->addr = NULL;
 
-        while ((BDT(1, TX, endp1_odd).desc & BDT_OWN) == 0) {
+        while ((BDT(1, TX, endp1_bdt_idx).desc & BDT_OWN) == 0) {
 
             // if no message has been partially transmitted,
             // get a new one from the queue
@@ -606,7 +604,7 @@ void endp1_tx_msg(wk_msg_header* msg) {
 
     __disable_irq();
 
-    if (BDT(1, TX, endp1_odd).desc & BDT_OWN) {
+    if (BDT(1, TX, endp1_bdt_idx).desc & BDT_OWN) {
         // queue message
         endp1_append_buffer(msg);
     } else {
@@ -627,18 +625,18 @@ void endp1_submit_packet()
     if (chunk_size > 64)
         chunk_size = 64;
 
-    BDT(1, TX, endp1_odd).addr = partial_msg + partial_msg_offset;
-    BDT(1, TX, endp1_odd).desc = BD_OWNED_BY_USB(chunk_size, endp1_data);
+    BDT(1, TX, endp1_bdt_idx).addr = partial_msg + partial_msg_offset;
+    BDT(1, TX, endp1_bdt_idx).desc = BD_OWNED_BY_USB(chunk_size, endp1_data);
 
     partial_msg_offset += chunk_size;
     if (partial_msg_offset >= partial_msg_size) {
         // entire message was submitted for transmission
-        msg_free_addr[endp1_odd] = partial_msg;
+        msg_free_addr[endp1_bdt_idx] = partial_msg;
         partial_msg = NULL;
     }
 
     endp1_data ^= 1;
-    endp1_odd ^= 1;
+    endp1_bdt_idx ^= 1;
 }
 
 
@@ -684,9 +682,9 @@ void endp1_clear_tx_buffer()
  * Endpoint 2 handler
  */
 
-static volatile uint8_t endp2_buffer_even[ENDP2_PACKET_SIZE] __attribute__ ((aligned (4)));
-static volatile uint8_t endp2_buffer_odd[ENDP2_PACKET_SIZE] __attribute__ ((aligned (4)));
-static uint8_t endp2_odd = 0;
+static volatile uint8_t endp2_buffer_0[ENDP2_PACKET_SIZE] __attribute__ ((aligned (4)));
+static volatile uint8_t endp2_buffer_1[ENDP2_PACKET_SIZE] __attribute__ ((aligned (4)));
+static uint8_t endp2_bdt_idx = 0;
 static uint8_t endp2_data = 0;
 
 static void endp2_handler(uint8_t stat);
@@ -699,18 +697,6 @@ void endp2_handler(uint8_t stat)
 
     switch (BDT_PID(bdt->desc)) {
     case PID_SETUP:
-        /*
-		// we are now done with the buffer
-        bdt->desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, 1);
-
-        // clear any pending IN stuff
-        BDT(2, RX, EVEN).desc = 0;
-		BDT(2, RX, ODD).desc = 0;
-        endp2_data = 1;
-
-        // unfreeze this endpoint
-        USB2_CTL = USB_CTL_USBENSOFEN;
-        */
         break;
 
     case PID_IN: // TX
@@ -732,10 +718,10 @@ volatile uint8_t* endp2_get_rx_buffer()
     if (dev_state != DEV_STATE_CONFIGURED)
         return NULL; // not in configured state
 
-    if (BDT(2, RX, endp2_odd).desc & BDT_OWN)
+    if (BDT(2, RX, endp2_bdt_idx).desc & BDT_OWN)
         return NULL; // no received data currently available
 
-    return BDT(2, RX, endp2_odd).addr;
+    return BDT(2, RX, endp2_bdt_idx).addr;
 }
 
 
@@ -744,19 +730,19 @@ int16_t endp2_get_rx_size()
     if (dev_state != DEV_STATE_CONFIGURED)
         return -1; // not in configured state
 
-    if (BDT(2, RX, endp2_odd).desc & BDT_OWN)
+    if (BDT(2, RX, endp2_bdt_idx).desc & BDT_OWN)
         return -1; // no received data currently available
 
-    return (BDT(2, RX, endp2_odd).desc >> BDT_BC_SHIFT) & 0x03ff;
+    return (BDT(2, RX, endp2_bdt_idx).desc >> BDT_BC_SHIFT) & 0x03ff;
 
 }
 
 
 void endp2_consume_rx_buffer()
 {
-    BDT(2, RX, endp2_odd).desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, endp2_data);
+    BDT(2, RX, endp2_bdt_idx).desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, endp2_data);
     endp2_data ^= 1;
-    endp2_odd ^= 1;
+    endp2_bdt_idx ^= 1;
 }
 
 
@@ -823,31 +809,31 @@ void usb_init(const char* serial_number)
 
 void usb_buffer_init(uint8_t configuration)
 {
-    endp0_odd = EVEN;
+    endp0_bdt_idx = 0;
     endp0_data = DATA0;
-    BDT(0, RX, EVEN).addr = endp0_rx[EVEN];
-    BDT(0, RX, EVEN).desc = BD_OWNED_BY_USB(ENDP0_PACKET_SIZE, DATA0);
-    BDT(0, RX, ODD).addr = endp0_rx[ODD];
-    BDT(0, RX, ODD).desc = BD_OWNED_BY_USB(ENDP0_PACKET_SIZE, DATA1);
-    BDT(0, TX, EVEN).addr = 0;
-    BDT(0, TX, EVEN).desc = 0;
-    BDT(0, TX, ODD).addr = 0;
-    BDT(0, TX, ODD).desc = 0;
+    BDT(0, RX, 0).addr = endp0_rx[0];
+    BDT(0, RX, 0).desc = BD_OWNED_BY_USB(ENDP0_PACKET_SIZE, DATA0);
+    BDT(0, RX, 1).addr = endp0_rx[1];
+    BDT(0, RX, 1).desc = BD_OWNED_BY_USB(ENDP0_PACKET_SIZE, DATA1);
+    BDT(0, TX, 0).addr = 0;
+    BDT(0, TX, 0).desc = 0;
+    BDT(0, TX, 1).addr = 0;
+    BDT(0, TX, 1).desc = 0;
 
     //initialize endpoint0 to 0x0d (41.5.23)
     //transmit, recieve, and handshake
     USB0_ENDPT0 = USB_ENDPT_EPRXEN | USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK;
 
-    endp1_odd = EVEN;
+    endp1_bdt_idx = 0;
     endp1_data = DATA0;
-    BDT(1, RX, EVEN).addr = 0;
-    BDT(1, RX, EVEN).desc = 0;
-    BDT(1, RX, ODD).addr = 0;
-    BDT(1, RX, ODD).desc = 0;
-    BDT(1, TX, EVEN).addr = 0;
-    BDT(1, TX, EVEN).desc = 0;
-    BDT(1, TX, ODD).addr = 0;
-    BDT(1, TX, ODD).desc = 0;
+    BDT(1, RX, 0).addr = 0;
+    BDT(1, RX, 0).desc = 0;
+    BDT(1, RX, 1).addr = 0;
+    BDT(1, RX, 1).desc = 0;
+    BDT(1, TX, 0).addr = 0;
+    BDT(1, TX, 0).desc = 0;
+    BDT(1, TX, 1).addr = 0;
+    BDT(1, TX, 1).desc = 0;
 
     for (int i = 0; i < 2; i++) {
         if (msg_free_addr[i] != NULL) {
@@ -861,16 +847,16 @@ void usb_buffer_init(uint8_t configuration)
     
     USB0_ENDPT1 = configuration == 1 ? USB_ENDPT_EPTXEN | USB_ENDPT_EPHSHK : 0;
 
-    endp2_odd = EVEN;
+    endp2_bdt_idx = 0;
     endp2_data = DATA0;
-    BDT(2, RX, EVEN).addr = endp2_buffer_even;
-    BDT(2, RX, EVEN).desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, DATA0);
-    BDT(2, RX, ODD).addr = endp2_buffer_odd;
-    BDT(2, RX, ODD).desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, DATA1);
-    BDT(2, TX, EVEN).addr = 0;
-    BDT(2, TX, EVEN).desc = 0;
-    BDT(2, TX, ODD).addr = 0;
-    BDT(2, TX, ODD).desc = 0;
+    BDT(2, RX, 0).addr = endp2_buffer_0;
+    BDT(2, RX, 0).desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, DATA0);
+    BDT(2, RX, 1).addr = endp2_buffer_1;
+    BDT(2, RX, 1).desc = BD_OWNED_BY_USB(ENDP2_PACKET_SIZE, DATA1);
+    BDT(2, TX, 0).addr = 0;
+    BDT(2, TX, 0).desc = 0;
+    BDT(2, TX, 1).addr = 0;
+    BDT(2, TX, 1).desc = 0;
 
     USB0_ENDPT2 = configuration == 1 ? USB_ENDPT_EPRXEN | USB_ENDPT_EPHSHK : 0;
 
