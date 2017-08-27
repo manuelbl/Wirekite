@@ -148,12 +148,12 @@ void handle_config_request(wk_config_request* request)
             uint16_t port_id = 0;
             uint16_t optional1 = 0;
             if (request->port_type == WK_CFG_PORT_TYPE_DIGI_PIN) {
-                digital_pin pin = digital_pin_init(request->pin_config, request->port_attributes & 0x01, request->port_attributes & 0xfe);
+                digital_pin pin = digital_pin_init(request->pin_config, request->port_attributes1 & 0x01, request->port_attributes1 & 0xfe);
                 port_id = PORT_GROUP_DIGI_PIN | pin;
-                if ((request->port_attributes & 0x01) == DIGI_PIN_INPUT)
+                if ((request->port_attributes1 & 0x01) == DIGI_PIN_INPUT)
                     optional1 = digital_pin_get_input(pin);
             } else if (request->port_type == WK_CFG_PORT_TYPE_ANALOG_IN) {
-                analog_pin pin = analog_pin_init(request->pin_config, request->port_attributes, request->value1);
+                analog_pin pin = analog_pin_init(request->pin_config, request->port_attributes1, request->value1);
                 if (pin != ANALOG_PIN_ERROR)
                     port_id = PORT_GROUP_ANALOG_IN | pin;
             } else if (request->port_type == WK_CFG_PORT_TYPE_PWM) {
@@ -161,7 +161,7 @@ void handle_config_request(wk_config_request* request)
                 if (pin != PWM_PIN_ERROR)
                     port_id = PORT_GROUP_PWM | pin;
             } else if (request->port_type == WK_CFG_PORT_TYPE_I2C) {
-                i2c_port port = i2c_master_init(request->pin_config, request->port_attributes, request->value1);
+                i2c_port port = i2c_master_init(request->pin_config, request->port_attributes1, request->value1);
                 if (port != I2C_PORT_ERROR)
                     port_id = PORT_GROUP_I2C | port;
             }
@@ -194,10 +194,10 @@ void handle_config_request(wk_config_request* request)
         
         } else if (request->action == WK_CFG_ACTION_CONFIG_MODULE) {
             if (request->port_type == WK_CFG_MODULE_PWM_TIMER) {
-                pwm_timer_config(request->pin_config, request->value1, request->port_attributes);
+                pwm_timer_config(request->pin_config, request->value1, request->port_attributes1);
             
             } else if (request->port_type == WK_CFG_MODULE_PWM_CHANNEL) {
-                pwm_channel_config(request->pin_config, request->value1, request->port_attributes);
+                pwm_channel_config(request->pin_config, request->value1, request->port_attributes1);
             }
         
         } else {

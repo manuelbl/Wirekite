@@ -65,7 +65,8 @@ typedef struct {
   uint16_t request_id;
   uint16_t pin_config;
   uint32_t value1;
-  uint16_t port_attributes;
+  uint16_t port_attributes1;
+  uint16_t port_attributes2;
 } wk_config_request;
 
 
