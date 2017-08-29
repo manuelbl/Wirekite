@@ -309,8 +309,9 @@ void master_start_send_2(wk_port_request* request)
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
     // acquire bus
-    if (acquire_bus(port) != 0) {
-        write_complete(port, I2C_STATUS_TIMEOUT, 0);
+    uint8_t status = acquire_bus(port);
+    if (status != I2C_STATUS_OK) {
+        write_complete(port, status, 0);
         return;
     }
 
@@ -413,8 +414,9 @@ void master_start_recv_3(i2c_port port, uint16_t slave_addr)
     pi->processed = 0;
 
     // acquire bus
-    if (acquire_bus(port) != 0) {
-        read_complete(port, I2C_STATUS_TIMEOUT, 0);
+    uint8_t status = acquire_bus(port);
+    if (status != I2C_STATUS_OK) {
+        read_complete(port, status, 0);
         return;
     }
 
@@ -450,7 +452,7 @@ wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t r
     uint16_t msg_size = WK_PORT_EVENT_ALLOC_SIZE(rx_size);
     wk_port_event* response = mm_alloc(msg_size);
     if (response == NULL) {
-        wk_send_port_event_2(port_id, WK_EVENT_DATA_RECV, request_id, I2C_OUT_OF_MEMORY, 0, 0, NULL, 0);
+        wk_send_port_event_2(port_id, WK_EVENT_DATA_RECV, request_id, I2C_STATUS_OUT_OF_MEMORY, 0, 0, NULL, 0);
         return NULL;
     }
         
@@ -604,17 +606,23 @@ uint8_t acquire_bus(i2c_port port)
 {
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
     if (i2c->C1 & I2C_C1_MST) {
+        // I2C module is already master; send a repeated start condition
         i2c->C1 = I2C_C1_IICEN | I2C_C1_MST | I2C_C1_RSTA | I2C_C1_TX;
+
     } else {
-        while (1) { // TODO: put into background
-            if (!(i2c->S & I2C_S_BUSY)) {
-                i2c->C1 = I2C_C1_IICEN | I2C_C1_MST | I2C_C1_TX;
-                break;
-            }
+        if (i2c->S & I2C_S_BUSY) {
+            // bus is busy; return error
+            port_info[port].state = STATE_WAITING;
+            return I2C_STATUS_BUS_BUSY;
         }
+
+        // become master in transmit mode and send start condition
+        i2c->C1 = I2C_C1_IICEN | I2C_C1_MST | I2C_C1_TX;
+
+        // verify success
         if (!(i2c->C1 & I2C_C1_MST)) {
-            port_info[port].state = STATE_ERROR;
-            return 1;
+            port_info[port].state = STATE_WAITING;
+            return I2C_STATUS_BUS_BUSY;
         }
     }
 
