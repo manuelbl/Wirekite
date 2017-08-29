@@ -22,7 +22,8 @@
         "i2c.h": "c",
         "uart.h": "c",
         "string.h": "c",
-        "mem.h": "c"
+        "mem.h": "c",
+        "unistd.h": "c"
     },
     "C_Cpp.intelliSenseEngine": "Default"
 }

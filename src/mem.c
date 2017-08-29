@@ -26,6 +26,7 @@
  */
 
 #include <string.h>
+#include <unistd.h>
 #include "kinetis.h"
 #include "mem.h"
 
@@ -40,8 +41,16 @@ static chunk_t freelist;
 #define NO_SIZE 0xffffffff
 
 
+static uint32_t get_max_mem();
+
+
 void mm_init(void* heap, uint32_t heap_len)
 {
+    if (heap == NULL && heap_len == 0) {
+        heap_len = (get_max_mem() - 64) & 0xfffffff8;
+        heap = sbrk(heap_len);
+    }
+
     chunk_t* chunk = (chunk_t*)heap;
     chunk->size = heap_len;
     chunk->next = NULL;
@@ -129,4 +138,33 @@ void mm_free(void* ptr)
     }
 
     __enable_irq();
+}
+
+
+
+extern char *__brkval;
+
+// Copy from kinetis.c (about line 1136)
+#ifndef STACK_MARGIN
+#if defined(__MKL26Z64__)
+#define STACK_MARGIN  512
+#elif defined(__MK20DX128__)
+#define STACK_MARGIN  1024
+#elif defined(__MK20DX256__)
+#define STACK_MARGIN  4096
+#elif defined(__MK64FX512__) || defined(__MK66FX1M0__)
+#define STACK_MARGIN  8192
+#endif
+#endif
+
+//#pragma GCC diagnostic push
+//#pragma GCC diagnostic ignored "-Wunused-parameter"
+
+uint32_t get_max_mem()
+{
+    char* stack;
+
+    __asm__ volatile("mov %0, sp" : "=r" (stack) ::);
+
+    return stack - STACK_MARGIN - __brkval;
 }

@@ -5,7 +5,6 @@
  * https://opensource.org/licenses/MIT
  */
 
-#include <unistd.h>
 #include "kinetis.h"
 
 #include "analog.h"
@@ -25,8 +24,7 @@ void check_usb();
 
 extern int main(void)
 {
-    void* heap = sbrk(3000);
-    mm_init(heap, 3000);
+    mm_init(NULL, 0);
 
     analog_init();
     pwm_init();
