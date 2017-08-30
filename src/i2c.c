@@ -323,15 +323,23 @@ void master_start_send_2(wk_port_request* request)
     pi->request = request;
     pi->processed = 0;
 
-    // setup DMA (the address and the first byte will be transmitted manually)
+    // setup DMA
     uint8_t dma = pi->dma;
-    if (dma != DMA_CHANNEL_ERROR) {
-        dma_source_byte_buffer(dma, request->data + 1, WK_PORT_REQUEST_DATA_LEN(pi->request) - 1);
+    if (pi->dma != DMA_CHANNEL_ERROR && WK_PORT_REQUEST_DATA_LEN(pi->request) > 3) {
+        // switch to DMA for bulk of data
+        dma_source_byte_buffer(dma, request->data, WK_PORT_REQUEST_DATA_LEN(pi->request));
         dma_dest_byte(dma, &i2c->D);
+        pi->sub_state = SUB_STATE_DMA;
+        i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX | I2C_C1_DMAEN; // enable DMA
+        dma_enable(pi->dma);
+        // DMA will start after first byte (slave address)
+    
+    } else {
+        // enable interrupt
+        i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
     }
 
-    // enable interrupt and send address (for writing)
-    i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
+    // transmit address (writing mode)
     i2c->D = (uint8_t)(request->action_attribute2 << 1);
 }
 
@@ -489,7 +497,9 @@ void i2c_isr_handler(uint8_t port)
         } else if (status & I2C_S_RXAK) {
             pi->state = STATE_ERROR;
             i2c->C1 = I2C_C1_IICEN; // reset to RX
-            completion_status = sub_state == SUB_STATE_ADDR ? I2C_STATUS_ADDR_NAK : I2C_STATUS_DATA_NAK;
+            completion_status = I2C_STATUS_DATA_NAK;
+            if (sub_state == SUB_STATE_ADDR || (sub_state == SUB_STATE_DMA && pi->processed == 0))
+                completion_status = I2C_STATUS_ADDR_NAK;
 
         // transmission is progressing
         } else {
@@ -497,15 +507,7 @@ void i2c_isr_handler(uint8_t port)
             // address transmitted
             if (sub_state == SUB_STATE_ADDR) {
 
-                if (pi->dma != DMA_CHANNEL_ERROR && WK_PORT_REQUEST_DATA_LEN(pi->request) > 4) {
-                    // switch to DMA for bulk of data
-                    pi->sub_state = SUB_STATE_DMA;
-                    i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX | I2C_C1_DMAEN; // enable DMA
-                    dma_enable(pi->dma);
-                    // DMA will start on next byte
-                } else {
-                    pi->sub_state = SUB_STATE_DATA;
-                }
+                pi->sub_state = SUB_STATE_DATA;
                 i2c->D = pi->request->data[0];
                 
             /*
