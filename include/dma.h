@@ -40,9 +40,10 @@ void dma_trigger_at_hw_evt(uint8_t channel, uint8_t source);
 void dma_interrupt_on_completion(uint8_t channel);
 void dma_disable_on_completion(uint8_t channel);
 
+void dma_source_byte(uint8_t channel, volatile uint8_t* addr);
 void dma_source_byte_buffer(uint8_t channel, const uint8_t* buf, uint16_t len);
 void dma_dest_byte(uint8_t channel, volatile uint8_t* addr);
-
+void dma_dest_byte_buffer(uint8_t channel, uint8_t* buf, uint16_t len);
 
 
 #ifdef __cplusplus

@@ -141,6 +141,14 @@ void dma_trigger_at_hw_evt(uint8_t channel, uint8_t source)
 }
 
 
+void dma_source_byte(uint8_t channel, volatile uint8_t* addr)
+{
+    DMA_CFG_t* cfg = dma_cfg(channel);
+    cfg->SAR = addr;
+    cfg->DCR = (cfg->DCR & 0xF08E0FFF) | DMA_DCR_SSIZE(1);
+}
+
+
 void dma_source_byte_buffer(uint8_t channel, const uint8_t* buf, uint16_t len)
 {
     DMA_CFG_t* cfg = dma_cfg(channel);
@@ -155,6 +163,15 @@ void dma_dest_byte(uint8_t channel, volatile uint8_t* addr)
     DMA_CFG_t* cfg = dma_cfg(channel);
     cfg->DAR = addr;
     cfg->DCR = (cfg->DCR & 0xF0F0F0FF) | DMA_DCR_DSIZE(1);
+}
+
+
+void dma_dest_byte_buffer(uint8_t channel, uint8_t* buf, uint16_t len)
+{
+    DMA_CFG_t* cfg = dma_cfg(channel);
+    cfg->DAR = buf;
+    cfg->DCR = (cfg->DCR & 0xF0F0F0FF) | DMA_DCR_DSIZE(1) | DMA_DCR_DINC;
+    cfg->DSR_BCR = len;
 }
 
 

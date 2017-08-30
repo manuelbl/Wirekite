@@ -427,13 +427,15 @@ void master_start_recv_3(i2c_port port, uint16_t slave_addr)
         return;
     }
 
-    // setup DMA
-//    uint8_t dma = pi->dma;
-//    dma_source_byte(dma, &i2c->D);
-//    dma_dest_byte_buffer(dma, response->data + 1, WK_PORT_EVENT_DATA_LEN(pi->response) - 1);
-    
-    // enable interrupt and send address (for reading)
+    // prepare DMA
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
+    uint8_t dma = pi->dma;
+    if (dma != DMA_CHANNEL_ERROR) {
+        dma_source_byte(dma, &i2c->D);
+        dma_dest_byte_buffer(dma, pi->response->data, WK_PORT_EVENT_DATA_LEN(pi->response) - 1);
+    }
+
+    // enable interrupt and send address (for reading)
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
     i2c->D = (uint8_t)((slave_addr << 1) | 1);
 }
@@ -510,15 +512,6 @@ void i2c_isr_handler(uint8_t port)
                 pi->sub_state = SUB_STATE_DATA;
                 i2c->D = pi->request->data[0];
                 
-            /*
-            // DMA has finished sending second to last byte
-            } else if (state == STATE_TX_DMA_SND_LAST) {
-                while (!(i2c->S & I2C_S_TCF)); // wait for transfer complete
-                dma_clear_complete(port_info[port].dma);
-                port_info[port].state = STATE_TX_INTR_LAST;
-                i2c->D = port_info[port].buffer[port_info[port].buf_len - 1];
-            */
-
             // transmission complete
             } else if (pi->processed == WK_PORT_REQUEST_DATA_LEN(pi->request) - 1) {
                 pi->processed++;
@@ -568,10 +561,20 @@ void i2c_isr_handler(uint8_t port)
 
             // slave address transmitted
             } else {
-                pi->sub_state = SUB_STATE_DATA;
-                i2c->C1 = data_len > 1
-                    ? I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST
-                    : I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK; // set NAK
+
+                if (data_len > 3 && pi->dma != DMA_CHANNEL_ERROR) {
+                    // enable DMA
+                    pi->sub_state = SUB_STATE_DMA;
+                    i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_DMAEN; // enable DMA
+                    dma_enable(pi->dma);
+                    // DMA will start after first byte (slave address)
+                    
+                } else {
+                    pi->sub_state = SUB_STATE_DATA;
+                    i2c->C1 = data_len > 1
+                        ? I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST
+                        : I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK; // set NAK
+                }
                 uint8_t __attribute__((unused)) data = i2c->D; // dummy read (see chip manual, I2C interrupt routine)
             }
             
@@ -690,7 +693,7 @@ void dma_isr_handler(uint8_t port)
         // DMA has written last byte to data register; I2C starts to send last byte
         if (dma_is_complete(dma)) {            
             dma_clear_interrupt(dma);
-            dma_clear_complete(dma);
+            dma_clear_complete(dma); // revisit for Teensy 3.2
             pi->sub_state = SUB_STATE_DATA;
             pi->processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - 1;
             // disable DMA
@@ -698,7 +701,7 @@ void dma_isr_handler(uint8_t port)
             i2c->S = I2C_S_IICIF; // clear flags
             
         } else {
-            uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) - 1;
+            uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma);
             dma_clear_interrupt(dma);
             dma_clear_error(dma);
 
@@ -706,6 +709,28 @@ void dma_isr_handler(uint8_t port)
             i2c->S = I2C_S_ARBL | I2C_S_IICIF; // clear flags
             i2c->C1 = I2C_C1_IICEN; // disable, set to RX
             write_complete(port, status, processed);
+        }
+
+    } else {
+
+        // DMA has read second to last byte to data register; I2C starts to send last byte
+        if (dma_is_complete(dma)) {
+            dma_clear_interrupt(dma);
+            dma_clear_complete(dma); // revisit for Teensy 3.2
+            pi->sub_state = SUB_STATE_DATA;
+            pi->processed = WK_PORT_EVENT_DATA_LEN(pi->response) - 1;
+            // disable DMA and signal NAK
+            i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK;
+            i2c->S = I2C_S_IICIF; // clear flags
+
+        } else {
+            uint32_t processed = WK_PORT_EVENT_DATA_LEN(pi->request) - 1 - dma_bytes_remaining(dma);
+            dma_clear_interrupt(dma);
+            dma_clear_error(dma);
+
+            i2c->S = I2C_S_ARBL | I2C_S_IICIF; // clear flags
+            i2c->C1 = I2C_C1_IICEN; // disable, set to RX
+            read_complete(port, I2C_STATUS_UNKNOWN, processed);
         }
     }
 }
