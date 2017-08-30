@@ -117,12 +117,9 @@ void analog_pin_release(analog_pin pin)
 
 void analog_request_conversion(analog_pin pin)
 {
-    __disable_irq();
-
     if (running_conversion == ANALOG_PIN_NONE) {
         // no conversion on-going; start immediately
         running_conversion = pin;
-        __enable_irq();
         start_conversion(pin);
         return;
     }
@@ -137,8 +134,6 @@ void analog_request_conversion(analog_pin pin)
     } else {
         // buffer full; drop the request
     }
-
-    __enable_irq();
 }
 
 
@@ -169,8 +164,6 @@ analog_pin analog_get_completed_pin(int16_t* value)
     }
 
     // check if new conversion should be started
-    __disable_irq();
-
     if (circ_request_head != circ_request_tail) {
     
         circ_request_tail++;
@@ -180,12 +173,9 @@ analog_pin analog_get_completed_pin(int16_t* value)
         uint8_t pin = circ_request_buf[circ_request_tail];
         running_conversion = pin;
 
-        __enable_irq();
-
         start_conversion(pin);
     } else {
         running_conversion = ANALOG_PIN_NONE;
-        __enable_irq();
     }
     // extend value from 10bits to 15bits
     *value = (v << 5) | (v >> 5);
@@ -196,7 +186,6 @@ analog_pin analog_get_completed_pin(int16_t* value)
 
 void analog_reset()
 {
-    __disable_irq();
     is_calibrated = 0;
     running_conversion = ANALOG_PIN_NONE;
     circ_request_head = 0;
@@ -206,7 +195,6 @@ void analog_reset()
     ADC0_SC3 = 0; // cancel calibration
 
     analog_init();
-    __enable_irq();
 }
 
 
@@ -236,7 +224,6 @@ void complete_calibration()
 
 void analog_timer_tick()
 {
-    __disable_irq();
     for (int i = 0; i < num_triggers; i++) {
         uint32_t count = triggers[i].count;
         uint32_t treshold = triggers[i].treshold;
@@ -245,31 +232,24 @@ void analog_timer_tick()
             count = 0;
         triggers[i].count = count;
         if (count == 0) {
-            __enable_irq();
             analog_request_conversion(triggers[i].pin);
-            __disable_irq();
         }
     }
-    __enable_irq();
 }
 
 
 void insert_trigger(uint8_t pin, uint32_t treshold)
 {
-    __disable_irq();
     trigger_t* trigger = triggers + num_triggers;
     trigger->treshold = treshold;
     trigger->count = 0;
     trigger->pin = pin;
     num_triggers++;
-    __enable_irq();
 }
 
 
 void remove_trigger(uint8_t pin)
 {
-    __disable_irq();
-
     int idx;
     for (idx = 0; idx < num_triggers; idx++) {
         if (triggers[idx].pin == pin) {
@@ -279,8 +259,6 @@ void remove_trigger(uint8_t pin)
             num_triggers--;
         }
     }
-
-    __enable_irq();
 }
 
 

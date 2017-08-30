@@ -143,6 +143,7 @@ static const freq_div_t freq_divs[] = {
 
 #define SUB_STATE_ADDR 0
 #define SUB_STATE_DATA 1
+#define SUB_STATE_DMA 2
 
 
 #define CIRC_QUEUE_SIZE 12
@@ -176,8 +177,9 @@ static uint8_t acquire_bus(i2c_port port);
 static wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size);
 static void switch_to_recv(i2c_port port);
 static void master_start_recv_3(i2c_port port, uint16_t slave_addr);
-//static void dma_i2c0_isr();
-//static void dma_i2c1_isr();
+static void dma_i2c0_isr();
+static void dma_i2c1_isr();
+static void dma_isr_handler(uint8_t port);
 static void write_complete(i2c_port port, uint8_t status, uint16_t len);
 static void read_complete(i2c_port port, uint8_t status, uint16_t len);
 wk_port_request* get_next_request(i2c_port port);
@@ -205,11 +207,12 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
         return I2C_PORT_ERROR;
 
     uint8_t port = port_map[pins].i2c_port;
-    if (port_info[port].state != STATE_INACTIVE)
+    port_info_t* pi = &port_info[port];
+    if (pi->state != STATE_INACTIVE)
         return I2C_PORT_ERROR;
 
-    port_info[port].state = STATE_WAITING;
-    port_info[port].pins = pins;
+    pi->state = STATE_WAITING;
+    pi->pins = pins;
 
     if (port == 0) {
         SIM_SCGC4 |= SIM_SCGC4_I2C0;
@@ -237,15 +240,15 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
 
     NVIC_ENABLE_IRQ(port == 0 ? IRQ_I2C0 : IRQ_I2C1);
 
-    /*
     // configure DMA
     uint8_t dma = dma_acquire_channel();
-    port_info[port].dma = dma;
-    dma_disable_on_completion(dma);
-    dma_attach_interrupt(dma, port == 0 ? dma_i2c0_isr : dma_i2c1_isr);
-    dma_interrupt_on_completion(dma);
-    dma_trigger_at_hw_evt(dma, port == 0 ? DMAMUX_SOURCE_I2C0 : DMAMUX_SOURCE_I2C1);
-    */
+    pi->dma = dma;
+    if (dma != DMA_CHANNEL_ERROR) {
+        dma_disable_on_completion(dma);
+        dma_attach_interrupt(dma, port == 0 ? dma_i2c0_isr : dma_i2c1_isr);
+        dma_interrupt_on_completion(dma);
+        dma_trigger_at_hw_evt(dma, port == 0 ? DMAMUX_SOURCE_I2C0 : DMAMUX_SOURCE_I2C1);
+    }
 
     return port;
 }
@@ -255,20 +258,20 @@ void i2c_port_release(i2c_port port)
     if (port >= NUM_I2C_PORTS)
         return;
 
-    if (port_info[port].state == STATE_INACTIVE)
+    port_info_t* pi = &port_info[port];
+    if (pi->state == STATE_INACTIVE)
         return;
     
-    __disable_irq();
-    port_info[port].state = STATE_INACTIVE;
+    pi->state = STATE_INACTIVE;
     
-    //dma_release_channel(port_info[port].dma);
+    if (pi->dma != DMA_CHANNEL_ERROR)
+        dma_release_channel(pi->dma);
 
-    uint8_t pins = port_info[port].pins;
+    uint8_t pins = pi->pins;
     PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = 0;
     PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = 0;
 
     clear_request_queue(port);
-    __enable_irq();
 }
 
 
@@ -285,9 +288,7 @@ void i2c_master_start_send(wk_port_request* request)
 
     // if I2C port busy then queue request
     if (port_info[port].state != STATE_WAITING) {
-        __disable_irq();
         uint8_t success = append_request(port, request);
-        __enable_irq();
         if (!success)
             mm_free(request);
         return;
@@ -322,12 +323,12 @@ void master_start_send_2(wk_port_request* request)
     pi->request = request;
     pi->processed = 0;
 
-    /*
-    // setup DMA
+    // setup DMA (the address and the first byte will be transmitted manually)
     uint8_t dma = pi->dma;
-    dma_source_byte_buffer(dma, data + 1, len - 2);
-    dma_dest_byte(dma, &i2c->D);
-    */
+    if (dma != DMA_CHANNEL_ERROR) {
+        dma_source_byte_buffer(dma, request->data + 1, WK_PORT_REQUEST_DATA_LEN(pi->request) - 1);
+        dma_dest_byte(dma, &i2c->D);
+    }
 
     // enable interrupt and send address (for writing)
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
@@ -348,9 +349,7 @@ void i2c_master_start_recv(wk_port_request* request)
         
         memcpy(copy, request, request->header.message_size);
 
-        __disable_irq();
         uint8_t success = append_request(port, copy);
-        __enable_irq();
         if (!success)
             mm_free(copy);
         return;
@@ -420,6 +419,11 @@ void master_start_recv_3(i2c_port port, uint16_t slave_addr)
         return;
     }
 
+    // setup DMA
+//    uint8_t dma = pi->dma;
+//    dma_source_byte(dma, &i2c->D);
+//    dma_dest_byte_buffer(dma, response->data + 1, WK_PORT_EVENT_DATA_LEN(pi->response) - 1);
+    
     // enable interrupt and send address (for reading)
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
     i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
@@ -430,9 +434,7 @@ void master_start_recv_3(i2c_port port, uint16_t slave_addr)
 // check for pending request in queue
 void check_queue(i2c_port port)
 {
-    __disable_irq();
     wk_port_request* request = get_next_request(port);
-    __enable_irq();
 
     if (request == NULL)
         return;
@@ -494,12 +496,18 @@ void i2c_isr_handler(uint8_t port)
 
             // address transmitted
             if (sub_state == SUB_STATE_ADDR) {
-                //pi->state = STATE_TX_DMA_BULK;
-                //i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX | I2C_C1_DMAEN; // enable DMA
-                //dma_enable(pi->dma);
-                pi->sub_state = SUB_STATE_DATA;
-                i2c->D = pi->request->data[0];
 
+                if (pi->dma != DMA_CHANNEL_ERROR && WK_PORT_REQUEST_DATA_LEN(pi->request) > 4) {
+                    // switch to DMA for bulk of data
+                    pi->sub_state = SUB_STATE_DMA;
+                    i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX | I2C_C1_DMAEN; // enable DMA
+                    dma_enable(pi->dma);
+                    // DMA will start on next byte
+                } else {
+                    pi->sub_state = SUB_STATE_DATA;
+                }
+                i2c->D = pi->request->data[0];
+                
             /*
             // DMA has finished sending second to last byte
             } else if (state == STATE_TX_DMA_SND_LAST) {
@@ -668,30 +676,34 @@ void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency)
 }
 
 
-/*
 void dma_isr_handler(uint8_t port)
 {
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
-    uint8_t state = port_info[port].state;
-    uint8_t dma = port_info[port].dma;
-    
+    port_info_t* pi = &port_info[port];
+    uint8_t dma = pi->dma;
+
     // master to slave transmission
-    if (STATE_IS_TX(state)) {
-
-        // DMA starts to send sencond to last byte
-        if (state == STATE_TX_DMA_BULK && dma_is_complete(dma)) {
+    if (pi->state == STATE_TX) {
+        
+        // DMA has written last byte to data register; I2C starts to send last byte
+        if (dma_is_complete(dma)) {            
             dma_clear_interrupt(dma);
+            dma_clear_complete(dma);
+            pi->sub_state = SUB_STATE_DATA;
+            pi->processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - 1;
+            // disable DMA
             i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TX;
-            port_info[port].state = STATE_TX_DMA_SND_LAST;
-
-        } else if (dma_is_error(dma)) {
+            i2c->S = I2C_S_IICIF; // clear flags
+            
+        } else {
+            uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) - 1;
             dma_clear_interrupt(dma);
             dma_clear_error(dma);
 
-            if (i2c->S & I2C_S_ARBL) {
-                // TODO
-            }
-            send_write_completion(port, port_info[port].request_id, I2C_STATUS_ARB_LOST);
+            uint8_t status = (i2c->S & I2C_S_ARBL) ? I2C_STATUS_ARB_LOST : I2C_STATUS_UNKNOWN;
+            i2c->S = I2C_S_ARBL | I2C_S_IICIF; // clear flags
+            i2c->C1 = I2C_C1_IICEN; // disable, set to RX
+            write_complete(port, status, processed);
         }
     }
 }
@@ -707,7 +719,6 @@ void dma_i2c1_isr()
 {
     dma_isr_handler(1);
 }
-*/
 
 
 void i2c0_isr()

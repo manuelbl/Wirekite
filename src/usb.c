@@ -555,14 +555,14 @@ void endp1_handler(uint8_t stat)
 {
     // determine which bdt we are looking at here
     bdt_t* bdt = &STAT_TO_BDT(stat);
+    uint8_t bdt_idx;
 
     switch (BDT_PID(bdt->desc)) {
     case PID_SETUP:
         break;
 
     case PID_IN: // TX
-        __disable_irq();
-        uint8_t bdt_idx = STAT_BDT_IDX(stat);
+        bdt_idx = STAT_BDT_IDX(stat);
         if (msg_free_addr[bdt_idx] != NULL) {
             mm_free(msg_free_addr[bdt_idx]);
             msg_free_addr[bdt_idx] = NULL;
@@ -584,7 +584,6 @@ void endp1_handler(uint8_t stat)
 
             endp1_submit_packet();
         }
-        __enable_irq();
         break;
 
     case PID_OUT: // RX
@@ -602,8 +601,6 @@ void endp1_tx_msg(wk_msg_header* msg) {
     if (dev_state != DEV_STATE_CONFIGURED)
         return; // not in configured state
 
-    __disable_irq();
-
     if (BDT(1, TX, endp1_bdt_idx).desc & BDT_OWN) {
         // queue message
         endp1_append_buffer(msg);
@@ -613,8 +610,6 @@ void endp1_tx_msg(wk_msg_header* msg) {
         partial_msg_offset = 0;
         endp1_submit_packet();
     }
-
-    __enable_irq();
 }
 
 

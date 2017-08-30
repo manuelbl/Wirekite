@@ -16,7 +16,6 @@
 #include "proto.h"
 #include "pwm.h"
 #include "usb.h"
-#include "yield.h"
 #include "debug.h"
 
 
@@ -36,6 +35,7 @@ static void wk_reset();
 
 void wk_check_usb_rx()
 {
+    __disable_irq();
     // check for global reset
     if (wk_reset_flag != 0) {
         wk_reset_flag = 0;
@@ -43,8 +43,10 @@ void wk_check_usb_rx()
     }
 
     int16_t rx_size = endp2_get_rx_size();
-    if (rx_size <= 0)
+    if (rx_size <= 0) {
+        __enable_irq();
         return;
+    }
     
     uint8_t* rx_buf = (uint8_t*) endp2_get_rx_buffer();
 
@@ -90,6 +92,7 @@ void wk_check_usb_rx()
         if (size < 8) {
             // oops?!
             endp2_consume_rx_buffer();
+            __enable_irq();
             return;
         }
 
@@ -120,6 +123,7 @@ void wk_check_usb_rx()
     }
 
     endp2_consume_rx_buffer();
+    __enable_irq();
 }
 
 

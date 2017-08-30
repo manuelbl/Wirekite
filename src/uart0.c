@@ -7,10 +7,8 @@
 
 #include "uart.h"
 #include "kinetis.h"
-#include "yield.h"
 
 
-#define IRQ_PRIORITY  64  // 0 = highest priority, 255 = lowest
 #define RX_BUFFER_SIZE 256
 #define TX_BUFFER_SIZE 256
 
@@ -26,11 +24,9 @@ static volatile uint8_t is_transmitting = 0;
 static volatile uint8_t tx_buffer[TX_BUFFER_SIZE];
 static volatile uint16_t tx_buffer_head = 0;
 static volatile uint16_t tx_buffer_tail = 0;
-static uart_event_func_t rx_evt_func;
 
 static void uart_putchar(int32_t c);
 static int32_t uart_getchar();
-static void yield_func();
 
 
 void uart0_init(int32_t baudrate)
@@ -56,19 +52,10 @@ void uart0_init(int32_t baudrate)
     // enable transmitter and receiver
     UART0_C2 = C2_TX_IIDLE;
 
-    // register yield func
-    yield_add_func(yield_func);
-
     // enable interrupts
     NVIC_CLEAR_PENDING(IRQ_UART0_STATUS);
-    NVIC_SET_PRIORITY(IRQ_UART0_STATUS, IRQ_PRIORITY);
+    NVIC_SET_PRIORITY(IRQ_UART0_STATUS, 128);
     NVIC_ENABLE_IRQ(IRQ_UART0_STATUS);
-}
-
-
-void uart0_set_recv_evt(uart_event_func_t func)
-{
-    rx_evt_func = func;
 }
 
 
@@ -77,9 +64,6 @@ void uart0_end()
     if (!(SIM_SCGC4 & SIM_SCGC4_UART0))
         return;
 
-    while (is_transmitting)
-        yield();
-    
     NVIC_CLEAR_PENDING(IRQ_UART0_STATUS);
     NVIC_DISABLE_IRQ(IRQ_UART0_STATUS);
     UART0_C2 = 0;
@@ -109,13 +93,6 @@ void uart0_println(const char* ptr)
         uart_putchar((uint8_t)ptr[i]);
     uart_putchar('\r');
     uart_putchar('\n');
-}
-
-
-void uart0_flush()
-{
-    while (is_transmitting)
-        yield();
 }
 
 
@@ -152,23 +129,9 @@ void uart_putchar(int32_t c)
     if (head >= TX_BUFFER_SIZE)
         head = 0;
 
-    // while buffer is full...
-    while (tx_buffer_tail == head) {
-        int priority = nvic_execution_priority();
-        if (priority <= IRQ_PRIORITY) {
-            if (UART0_S1 & UART_S1_TDRE) {
-                uint16_t tail = tx_buffer_tail;
-                tail++;
-                if (tail >= TX_BUFFER_SIZE)
-                    tail = 0;
-                uint16_t byte = tx_buffer[tail];
-                UART0_D = byte;
-                tx_buffer_tail = tail;
-            }
-        } else if (priority >= 256) {
-            yield();
-        }
-    }
+    // if buffer is full, drop data
+    if (tx_buffer_tail == head)
+        return;
 
     tx_buffer[head] = c;
     is_transmitting = 1;
@@ -231,14 +194,4 @@ void uart0_status_isr(void)
         is_transmitting = 0;
         UART0_C2 = C2_TX_IIDLE;
     }
-}
-
-
-void yield_func()
-{
-    if (uart0_avail() <= 0)
-        return;
-    if (rx_evt_func == NULL)
-        return;
-    rx_evt_func();
 }

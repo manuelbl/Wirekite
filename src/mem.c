@@ -59,8 +59,6 @@ void mm_init(void* heap, uint32_t heap_len)
 
 void* mm_alloc(uint32_t size)
 {
-    __disable_irq();
-
     // round up to allocation size and add 4 bytes to store size
     uint32_t required_size = ((size + 3) & 0xfffffffc) + 4;
     
@@ -81,10 +79,8 @@ void* mm_alloc(uint32_t size)
         curr = curr->next;
     }
     
-    if (smallest_size == NO_SIZE) {
-        __enable_irq();
+    if (smallest_size == NO_SIZE)
         return NULL; // no sufficiently large chunk left
-    }
     
     uint32_t* p;
     chunk_t* chunk = smallest_size_prev->next;
@@ -101,7 +97,6 @@ void* mm_alloc(uint32_t size)
         *p = required_size;
     }
 
-    __enable_irq();
     memset(p + 1, 0, required_size - 4);
     return p + 1;
 }
@@ -109,8 +104,6 @@ void* mm_alloc(uint32_t size)
 
 void mm_free(void* ptr)
 {
-    __disable_irq();
-
     chunk_t* chunk = (chunk_t*)(((uint32_t*)ptr) - 1);
     uint32_t size = chunk->size;
     
@@ -136,8 +129,6 @@ void mm_free(void* ptr)
         // link previous with deallocated
         curr->next = chunk;
     }
-
-    __enable_irq();
 }
 
 

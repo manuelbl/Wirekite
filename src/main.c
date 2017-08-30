@@ -32,7 +32,6 @@ extern int main(void)
 
 #ifdef _DEBUG
     uart0_init(115200);
-    uart0_set_recv_evt(uart_echo);
     DEBUG_OUT("START");
 #endif
 
@@ -47,24 +46,6 @@ extern int main(void)
     usb_init(serial_number);
 
     while (1) {
-
         wk_check_usb_rx();
-        
     }
 }
-
-
-#ifdef _DEBUG
-void uart_echo()
-{
-    char buf[1];
-    while (1) {
-        uart0_read(buf, 1);
-        uart0_write(buf, 1);
-        if (buf[0] == '\r')
-            uart0_write("\n", 1);
-        if (uart0_avail() <= 0)
-            break;
-    }
-}
-#endif

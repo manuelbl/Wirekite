@@ -30,6 +30,7 @@ uint8_t dma_is_complete(uint8_t channel);
 void dma_clear_complete(uint8_t channel);
 uint8_t dma_is_error(uint8_t channel);
 void dma_clear_error(uint8_t channel);
+uint32_t dma_bytes_remaining(uint8_t channel);
 
 void dma_attach_interrupt(uint8_t channel, void (*isr)(void));
 void dma_detach_interrupt(uint8_t channel);

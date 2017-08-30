@@ -32,6 +32,7 @@ extern "C" {
 #define I2C_STATUS_DATA_NAK 4
 #define I2C_STATUS_OUT_OF_MEMORY 5
 #define I2C_STATUS_BUS_BUSY 6
+#define I2C_STATUS_UNKNOWN 7
 
 
 typedef uint8_t i2c_port;

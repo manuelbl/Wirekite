@@ -17,7 +17,6 @@ extern "C" {
 typedef void (*uart_event_func_t)(void);
 
 void uart0_init(int32_t baudrate);
-void uart0_set_recv_evt(uart_event_func_t func);
 void uart0_end();
 void uart0_write(const char* ptr, int32_t len);
 void uart0_println(const char* ptr);
