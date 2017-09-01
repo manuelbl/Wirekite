@@ -26,9 +26,9 @@ extern int main(void)
 {
     mm_init(NULL, 0);
 
-    analog_init();
-    pwm_init();
-    i2c_init();
+//    analog_init();
+//    pwm_init();
+//    i2c_init();
 
 #ifdef _DEBUG
     uart0_init(115200);
@@ -48,4 +48,9 @@ extern int main(void)
     while (1) {
         wk_check_usb_rx();
     }
+}
+
+
+void rtc_set(unsigned long t)
+{
 }

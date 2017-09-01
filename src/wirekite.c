@@ -35,19 +35,19 @@ static void wk_reset();
 
 void wk_check_usb_rx()
 {
-    __disable_irq();
     // check for global reset
     if (wk_reset_flag != 0) {
         wk_reset_flag = 0;
+        __disable_irq();
         wk_reset();
+        __enable_irq();
     }
 
     int16_t rx_size = endp2_get_rx_size();
-    if (rx_size <= 0) {
-        __enable_irq();
+    if (rx_size <= 0)
         return;
-    }
     
+    __disable_irq();
     uint8_t* rx_buf = (uint8_t*) endp2_get_rx_buffer();
 
     if (partial_size > 0) {
@@ -366,9 +366,9 @@ void wk_reset()
 {
     DEBUG_OUT("RST");
     digital_pin_reset();
-    analog_reset();
-    pwm_reset();
-    i2c_reset();
+//    analog_reset();
+//    pwm_reset();
+//    i2c_reset();
 }
 
 

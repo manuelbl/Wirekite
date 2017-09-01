@@ -44,10 +44,23 @@ void uart0_init(int32_t baudrate)
     // 8 bit, no parity
     UART0_C1 = 0;
 
+#if defined(HAS_KINETISK_UART0)
+
+    int32_t divisor = (F_CPU * 2 + (baudrate >> 1)) / baudrate;
+    UART0_PFIFO = 0;
+	UART0_BDH = (divisor >> 13) & 0x1F;
+	UART0_BDL = (divisor >> 5) & 0xFF;
+	UART0_C4 = divisor & 0x1F;
+    
+
+#elif defined(HAS_KINETISL_UART0)
+
     // set baud rate (sbr and osr) bits
     int32_t divisor = (F_PLL / 2 / 16 + (baudrate >> 1)) / baudrate;
 	UART0_BDH = (divisor >> 8) & 0x1F;
 	UART0_BDL = divisor & 0xFF;
+
+#endif
 
     // enable transmitter and receiver
     UART0_C2 = C2_TX_IIDLE;

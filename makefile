@@ -6,10 +6,11 @@
 #
 
 #  Set your MCU type here
-#  - TeensyLC: MKL26Z64 / cortex-m0plus / 48000000
-MCU = MKL26Z64
-CPU = cortex-m0plus
-F_CPU = 48000000
+#  - Teensy LC: MKL26Z64 / cortex-m0plus / 48000000
+#  - Teensy 3.2: MK20DX256 / coretex-m4 / 72000000
+MCU = MK20DX256
+CPU = cortex-m4
+F_CPU = 72000000
 
 #  Tool path (GNU ARM Embedded Toolchain base directory)
 TOOLDIR = ~/Documents/Software/gcc-arm-none-eabi
@@ -93,6 +94,9 @@ release: $(OUTPUTDIR)/$(PROJECT).hex
 
 teensylc: $(OUTPUTDIR)/$(PROJECT).hex
 	cp $(OUTPUTDIR)/wirekite.hex $(OUTPUTDIR)/wirekite_teensylc.hex
+
+teensy32: $(OUTPUTDIR)/$(PROJECT).hex
+	cp $(OUTPUTDIR)/wirekite.hex $(OUTPUTDIR)/wirekite_teensy32.hex
 
 clean:
 	$(REMOVE) $(OBJDIR)

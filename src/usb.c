@@ -345,6 +345,7 @@ void endp0_handler(uint8_t stat)
             USB0_ADDR = last_setup.wValue;
             if (last_setup.wValue == 0)
                 dev_state = DEV_STATE_DEFAULT;
+            last_setup.wRequestAndType = 0;
         }
 
         break;
@@ -748,8 +749,6 @@ void endp2_consume_rx_buffer()
 
 void usb_init(const char* serial_number)
 {
-    usb_buffer_init(0);
-
     string_desc_t* desc = (string_desc_t*)&serial_num_buf;
     desc->bDescriptorType = 3;
     uint8_t len = 0;
@@ -915,6 +914,7 @@ restart:
             USB_INTEN_SOFTOKEN | USB_INTEN_TOKDNEEN |
             USB_INTEN_SLEEPEN | USB_INTEN_STALLEN;
 
+        USB0_CTL = USB_CTL_USBENSOFEN;
         return;
     }
 

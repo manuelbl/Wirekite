@@ -16,8 +16,6 @@ extern "C" {
 #endif
 
 
-#define DMA_NUM_CHANNELS   4
-
 #define DMA_CHANNEL_ERROR 0xff
 
 

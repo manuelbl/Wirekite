@@ -20,6 +20,7 @@ typedef struct {
     uint8_t pin : 5;
 } pin_map_t;
 
+#if defined(__MKL26Z64__)
 // pin map for Teensy LC
 static const pin_map_t pin_map[] = {
     { PORT_B, 16 },
@@ -50,6 +51,48 @@ static const pin_map_t pin_map[] = {
     { PORT_E, 21 },
     { PORT_E, 30 }
 };
+
+#elif defined(__MK20DX256__)
+
+static const pin_map_t pin_map[] = {
+    { PORT_B, 16 }, // PTB16
+    { PORT_B, 17 }, // PTB17
+    { PORT_D, 0 }, // PTD0
+    { PORT_A, 1 }, // PTA12
+    { PORT_A, 2 }, // PTA13
+    { PORT_D, 7 }, // PTD7
+    { PORT_D, 4 }, // PTD4
+    { PORT_D, 2 }, // PTD2
+    { PORT_D, 3 }, // PTD3
+    { PORT_C, 3 }, // PTC3
+    { PORT_C, 4 }, // PTC4
+    { PORT_C, 6 }, // PTC6
+    { PORT_C, 7 }, // PTC7
+    { PORT_C, 5 }, // PTC5
+    { PORT_D, 1 }, // PTD1
+    { PORT_C, 0 }, // PTC0
+    { PORT_B, 0 }, // PTB0
+    { PORT_B, 1 }, // PTB1
+    { PORT_B, 3 }, // PTB3
+    { PORT_B, 2 }, // PTB2
+    { PORT_D, 5 }, // PTD5
+    { PORT_D, 6 }, // PTD6
+    { PORT_C, 1 }, // PTC1
+    { PORT_C, 2 }, // PTC2
+    { PORT_A, 5 }, // PTA5
+    { PORT_B, 19 }, // PTB19
+    { PORT_E, 1 }, // PTE1
+    { PORT_C, 9 }, // PTC9
+    { PORT_C, 8 }, // PTC8
+    { PORT_C, 10 }, // PTC10
+    { PORT_C, 11 }, // PTC11
+    { PORT_E, 0 }, // PTE0
+    { PORT_B, 18 }, // PTB18
+    { PORT_A, 4 } // PTA4
+};
+
+#endif
+
 
 #define NUM_PINS (sizeof(pin_map)/sizeof(pin_map[0]))
 
@@ -107,9 +150,30 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
         NVIC_SET_PRIORITY(IRQ_PORTA, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTA);
 
+#if defined(__MKL26Z64__)
+        // Teensy LC
         NVIC_CLEAR_PENDING(IRQ_PORTCD);
         NVIC_SET_PRIORITY(IRQ_PORTCD, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTCD);
+
+#elif defined(__MK20DX256__)
+        // Teensy 3.2
+        NVIC_CLEAR_PENDING(IRQ_PORTB);
+        NVIC_SET_PRIORITY(IRQ_PORTB, 128);
+        NVIC_ENABLE_IRQ(IRQ_PORTB);
+
+        NVIC_CLEAR_PENDING(IRQ_PORTC);
+        NVIC_SET_PRIORITY(IRQ_PORTC, 128);
+        NVIC_ENABLE_IRQ(IRQ_PORTC);
+
+        NVIC_CLEAR_PENDING(IRQ_PORTD);
+        NVIC_SET_PRIORITY(IRQ_PORTD, 128);
+        NVIC_ENABLE_IRQ(IRQ_PORTD);
+
+        NVIC_CLEAR_PENDING(IRQ_PORTE);
+        NVIC_SET_PRIORITY(IRQ_PORTE, 128);
+        NVIC_ENABLE_IRQ(IRQ_PORTE);
+#endif
     }
 
     // initialize pin info
@@ -242,6 +306,24 @@ void digital_pin_reset()
     NVIC_DISABLE_IRQ(IRQ_PORTA);
     NVIC_CLEAR_PENDING(IRQ_PORTA);
 
+#if defined(__MKL26Z64__)
+    // Teensy LC
     NVIC_DISABLE_IRQ(IRQ_PORTCD);
     NVIC_CLEAR_PENDING(IRQ_PORTCD);
+
+#elif defined(__MK20DX256__)
+    // Teensy 3.2
+    NVIC_DISABLE_IRQ(IRQ_PORTB);
+    NVIC_CLEAR_PENDING(IRQ_PORTB);
+
+    NVIC_DISABLE_IRQ(IRQ_PORTC);
+    NVIC_CLEAR_PENDING(IRQ_PORTC);
+
+    NVIC_DISABLE_IRQ(IRQ_PORTD);
+    NVIC_CLEAR_PENDING(IRQ_PORTD);
+
+    NVIC_DISABLE_IRQ(IRQ_PORTE);
+    NVIC_CLEAR_PENDING(IRQ_PORTE);
+
+#endif
 }

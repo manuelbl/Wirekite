@@ -12,6 +12,10 @@
 static uint32_t dma_channels_in_use;
 
 
+#if defined(__MKL26Z64__)
+// Teensy LC
+
+
 typedef struct __attribute__((packed, aligned(4))) {
     volatile const void * volatile SAR;
     volatile void * volatile       DAR;
@@ -185,3 +189,101 @@ DMA_CFG_t* dma_cfg(uint8_t channel)
 {
     return ((DMA_CFG_t*)&DMA_SAR0) + channel;
 }
+
+
+#elif defined(__MK20DX256__)
+// Teensy 3.2
+
+
+uint8_t dma_acquire_channel()
+{
+    return DMA_CHANNEL_ERROR;
+}
+
+
+void dma_release_channel(uint8_t channel)
+{
+}
+
+
+void dma_enable(uint8_t channel)
+{
+}
+
+void dma_disable(uint8_t channel)
+{
+}
+
+uint8_t dma_is_complete(uint8_t channel)
+{
+    return 0;
+}
+
+void dma_clear_complete(uint8_t channel)
+{
+}
+
+uint8_t dma_is_error(uint8_t channel)
+{
+    return 0;
+}
+
+void dma_clear_error(uint8_t channel)
+{
+}
+
+uint32_t dma_bytes_remaining(uint8_t channel)
+{
+    return 0;
+}
+
+void dma_attach_interrupt(uint8_t channel, void (*isr)(void)) {
+}
+
+
+void dma_detach_interrupt(uint8_t channel)
+{
+}
+
+
+void dma_clear_interrupt(uint8_t channel)
+{
+}
+
+
+void dma_interrupt_on_completion(uint8_t channel)
+{
+}
+
+
+void dma_disable_on_completion(uint8_t channel)
+{
+}
+
+
+void dma_trigger_at_hw_evt(uint8_t channel, uint8_t source)
+{
+}
+
+
+void dma_source_byte(uint8_t channel, volatile uint8_t* addr)
+{
+}
+
+
+void dma_source_byte_buffer(uint8_t channel, const uint8_t* buf, uint16_t len)
+{
+}
+
+
+void dma_dest_byte(uint8_t channel, volatile uint8_t* addr)
+{
+}
+
+
+void dma_dest_byte_buffer(uint8_t channel, uint8_t* buf, uint16_t len)
+{
+}
+
+
+#endif

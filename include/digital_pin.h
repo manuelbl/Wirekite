@@ -14,34 +14,6 @@
 extern "C" {
 #endif
 
-#define DIGI_PIN_0   0
-#define DIGI_PIN_1   1
-#define DIGI_PIN_2   2
-#define DIGI_PIN_3   3
-#define DIGI_PIN_4   4
-#define DIGI_PIN_5   5
-#define DIGI_PIN_6   6
-#define DIGI_PIN_7   7
-#define DIGI_PIN_8   8
-#define DIGI_PIN_9   9
-#define DIGI_PIN_10 10
-#define DIGI_PIN_11 11
-#define DIGI_PIN_12 12
-#define DIGI_PIN_13 13
-#define DIGI_PIN_14 14
-#define DIGI_PIN_15 15
-#define DIGI_PIN_16 16
-#define DIGI_PIN_17 17
-#define DIGI_PIN_18 18
-#define DIGI_PIN_19 19
-#define DIGI_PIN_20 20
-#define DIGI_PIN_21 21
-#define DIGI_PIN_22 22
-#define DIGI_PIN_23 23
-#define DIGI_PIN_24 24
-#define DIGI_PIN_25 25
-#define DIGI_PIN_26 26
-#define DIGI_PIN_LED DIGI_PIN_13
 
 #define DIGI_PIN_ERROR 0xff
 

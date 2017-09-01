@@ -9,6 +9,7 @@ To integrate it:
 - Save teensy3/kinetis.h as include/kinetis.h
 - Save teensy3/mk20dx128.c as src/kinetis.c
 - Save teensy3/mkl26z64.ld as src/MKL26Z64.ld
+- Save teensy3/mk20dx256.ld as src/MK20DX256.ld
 
 Modify kinetis.c:
 

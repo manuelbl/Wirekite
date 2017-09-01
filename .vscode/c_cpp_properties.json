@@ -73,8 +73,8 @@
                 "~/Documents/Software/gcc-arm-none-eabi/lib/gcc/arm-none-eabi/6.3.1/include"
             ],
             "defines": [
-                "__MKL26Z64__",
-                "F_CPU=48000000",
+                "__MK20DX256__",
+                "F_CPU=72000000",
                 "_DEBUG"
             ],
             "intelliSenseMode": "clang-x64",

@@ -25,6 +25,9 @@ typedef struct {
     uint16_t channel : 3;
 } pin_map_t;
 
+
+#if defined(__MKL26Z64__)
+
 // PWM pin map of Teensy LC
 static pin_map_t pin_map[] = {
     { PORT_A, 1, 3, 2, 0 },   //  Pin 3    PTA1    TPM2_CH0
@@ -39,14 +42,50 @@ static pin_map_t pin_map[] = {
     { PORT_C, 2, 4, 0, 1 }    //  Pin 23   PTC2    TPM0_CH1
 };
 
+#elif defined(__MK20DX256__)
+
+// PWM pin map of Teensy 3.2
+static pin_map_t pin_map[] = {
+    { PORT_A, 1, 3, 0, 6 },   //  Pin 3    PTA1    FTM0_CH6 FTM1_CH0
+    { PORT_A, 2, 3, 0, 7 },   //  Pin 4    PTA2    FTM0_CH7 FTM1_CH1
+    { PORT_D, 7, 4, 0, 7 },   //  Pin 5    PTD7    FTM0_CH7
+    { PORT_D, 4, 4, 0, 4 },   //  Pin 6    PTD4    FTM0_CH4
+    { PORT_C, 3, 4, 0, 2 },   //  Pin 9    PTC3    FTM0_CH2
+    { PORT_C, 4, 4, 0, 3 },   //  Pin 10   PTC4    FTM0_CH3
+    { PORT_D, 5, 4, 0, 5 },   //  Pin 20   PTD5    FTM0_CH5
+    { PORT_D, 6, 4, 0, 6 },   //  Pin 21   PTD6    FTM0_CH6
+    { PORT_C, 1, 4, 0, 0 },   //  Pin 22   PTC1    FTM0_CH0
+    { PORT_C, 2, 4, 0, 1 },   //  Pin 23   PTC2    FTM0_CH1
+    { PORT_B, 19, 3, 2, 1 },  //  Pin 25   PTB19   FTM2_CH1
+    { PORT_B, 18, 3, 2, 0 }   //  Pin 32   PTB18   FTM2_CH0
+};
+
+#endif
+
+
 #define NUM_PINS (sizeof(pin_map)/sizeof(pin_map[0]))
 
+
+#if defined(__MKL26Z64__)
+// Teensy LC timers
 
 static volatile uint32_t* TPM_BASE_ADDR[] = {
     &TPM0_SC,
     &TPM1_SC,
     &TPM2_SC
 };
+
+#elif defined(__MK20DX256__)
+// PWM pin map of Teensy 3.2
+
+static volatile uint32_t* TPM_BASE_ADDR[] = {
+    &FTM0_SC,
+    &FTM1_SC,
+    &FTM2_SC,
+    &FTM3_SC
+};
+
+#endif
 
 #define NUM_TIMERS (sizeof(TPM_BASE_ADDR)/sizeof(TPM_BASE_ADDR[0]))
 
