@@ -15,6 +15,7 @@
 #define PORT_D 3
 #define PORT_E 4
 
+
 typedef struct {
     uint8_t port : 3;
     uint8_t pin : 5;
@@ -107,15 +108,23 @@ static volatile uint32_t* PCR_ADDR[] = {
 
 #define PCR_PTR(map) (PCR_ADDR[map.port] + map.pin)
 
-static volatile uint32_t* GPIO_BASE_ADDR[] = {
-    &GPIOA_PDOR,
-    &GPIOB_PDOR,
-    &GPIOC_PDOR,
-    &GPIOD_PDOR,
-    &GPIOE_PDOR
-};
 
-#define GPIO_BASE_PTR(map) (GPIO_BASE_ADDR[map.port])
+typedef struct __attribute__((packed, aligned(4))) {
+    volatile uint32_t PDOR; // Port Data Output Register
+    volatile uint32_t PSOR; // Port Set Output Register
+    volatile uint32_t PCOR; // Port Clear Output Register
+    volatile uint32_t PTOR; // Port Toggle Output Register
+    volatile uint32_t PDIR; // Port Data Input Register
+    volatile uint32_t PDDR; // Port Data Direction Register
+} GPIO_PORT_t;
+
+static GPIO_PORT_t* GPIO_PORT[] = {
+    (GPIO_PORT_t*)&GPIOA_PDOR,
+    (GPIO_PORT_t*)&GPIOB_PDOR,
+    (GPIO_PORT_t*)&GPIOC_PDOR,
+    (GPIO_PORT_t*)&GPIOD_PDOR,
+    (GPIO_PORT_t*)&GPIOE_PDOR
+};
 
 
 // information about pins in use
@@ -183,12 +192,11 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     pins[p].uses_interrupt = 0;
     
     // configure direction
-    volatile uint32_t* gpio_ptr = GPIO_BASE_PTR(map) + 5; // FGPIOx_PDDR
     uint32_t mask = 1 << (uint32_t)map.pin;
     if (direction == DIGI_PIN_INPUT) {
-        *gpio_ptr &= ~mask;
+        GPIO_PORT[map.port]->PDDR &= ~mask;
     } else {
-        *gpio_ptr |= mask;
+        GPIO_PORT[map.port]->PDDR |= mask;
     }
 
     // calculate pin configuration
@@ -236,30 +244,25 @@ void digital_pin_release(digital_pin pin)
     *pcr_ptr = PORT_PCR_ISF;
 
     uint32_t mask = 1 << (uint32_t)map.pin;
-    volatile uint32_t* gpio_base_ptr = GPIO_BASE_PTR(map); 
 
     // reset value
-    *(gpio_base_ptr + 2) = mask; // FGPIOx_PCOR
+    GPIO_PORT[map.port]->PCOR = mask;
     
     // reset direction
-    *(gpio_base_ptr + 5) &= ~mask; // FGPIOx_PDDR
+    GPIO_PORT[map.port]->PDDR &= ~mask;
 }
 
 
 void digital_pin_set_output(digital_pin pin, uint8_t value)
 {
     pin_map_t map = pins[pin].map;
-    
-    // compute register address
-    volatile uint32_t* gpio_ptr = GPIO_BASE_PTR(map);
-    if (value)
-        gpio_ptr += 1; // FGPIOx_PSOR
-    else
-        gpio_ptr += 2; // FGPIOx_PCOR
 
     // set value
     uint32_t mask = 1 << (uint32_t)map.pin;
-    *gpio_ptr = mask;
+    if (value)
+        GPIO_PORT[map.port]->PSOR = mask;
+    else
+        GPIO_PORT[map.port]->PCOR = mask;
 }
 
 
@@ -267,12 +270,9 @@ uint8_t digital_pin_get_input(digital_pin pin)
 {
     pin_map_t map = pins[pin].map;
     
-    // compute register address
-    volatile uint32_t* gpio_ptr = GPIO_BASE_PTR(map) + 4;
-
     // get value
     uint32_t mask = 1 << (uint32_t)map.pin;
-    return (*gpio_ptr & mask) ? DIGI_PIN_ON : DIGI_PIN_OFF;
+    return (GPIO_PORT[map.port]->PDIR & mask) ? DIGI_PIN_ON : DIGI_PIN_OFF;
 }
 
 

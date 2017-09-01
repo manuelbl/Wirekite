@@ -317,18 +317,9 @@ void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, ui
 }
 
 /*
- * Interrupt handler for digital input pins on port A
+ * Interrupt hander for digital input pins
  */
-void porta_isr()
-{
-    portcd_isr();
-}
-
-
-/*
- * Interrupt hander for digital input pins on port C and D
- */
-void portcd_isr()
+static void port_isr()
 {
     while (1) {
         digital_pin pin = digital_pin_get_interrupt_pin();
@@ -338,6 +329,48 @@ void portcd_isr()
         uint8_t value = digital_pin_get_input(pin);
         wk_send_port_event(PORT_GROUP_DIGI_PIN | pin, WK_EVENT_SINGLE_SAMPLE, 0, value);
     }
+}
+
+
+__attribute__((naked))
+void porta_isr()
+{
+    port_isr();
+}
+
+
+__attribute__((naked))
+void portb_isr()
+{
+    port_isr();
+}
+
+
+__attribute__((naked))
+void portc_isr()
+{
+    port_isr();
+}
+
+
+__attribute__((naked))
+void portd_isr()
+{
+    port_isr();
+}
+
+
+__attribute__((naked))
+void porte_isr()
+{
+    port_isr();
+}
+
+
+__attribute__((naked))
+void portcd_isr()
+{
+    port_isr();
 }
 
 
