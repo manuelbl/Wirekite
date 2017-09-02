@@ -26,7 +26,7 @@ extern int main(void)
 {
     mm_init(NULL, 0);
 
-//    analog_init();
+    analog_init();
 //    pwm_init();
 //    i2c_init();
 

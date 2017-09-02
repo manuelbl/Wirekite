@@ -29,6 +29,14 @@ extern "C" {
 #define ANALOG_PIN_A10  10
 #define ANALOG_PIN_A11  11
 #define ANALOG_PIN_A12  12
+#define ANALOG_PIN_A13  13
+#define ANALOG_PIN_A14  14
+#define ANALOG_PIN_A15  15
+#define ANALOG_PIN_A16  16
+#define ANALOG_PIN_A17  17
+#define ANALOG_PIN_A18  18
+#define ANALOG_PIN_A19  19
+#define ANALOG_PIN_A20  20
 #define ANALOG_PIN_VREF 128
 #define ANALOG_PIN_TEMP 129
 #define ANALOG_PIN_VREFL 130

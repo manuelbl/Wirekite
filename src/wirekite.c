@@ -316,80 +316,6 @@ void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, ui
     endp1_tx_msg(&event->header);
 }
 
-/*
- * Interrupt hander for digital input pins
- */
-static void port_isr()
-{
-    while (1) {
-        digital_pin pin = digital_pin_get_interrupt_pin();
-        if (pin == 0xff)
-            break;
-
-        uint8_t value = digital_pin_get_input(pin);
-        wk_send_port_event(PORT_GROUP_DIGI_PIN | pin, WK_EVENT_SINGLE_SAMPLE, 0, value);
-    }
-}
-
-
-__attribute__((naked))
-void porta_isr()
-{
-    port_isr();
-}
-
-
-__attribute__((naked))
-void portb_isr()
-{
-    port_isr();
-}
-
-
-__attribute__((naked))
-void portc_isr()
-{
-    port_isr();
-}
-
-
-__attribute__((naked))
-void portd_isr()
-{
-    port_isr();
-}
-
-
-__attribute__((naked))
-void porte_isr()
-{
-    port_isr();
-}
-
-
-__attribute__((naked))
-void portcd_isr()
-{
-    port_isr();
-}
-
-
-/*
- * Interrupt handler for analog-to-digital conversions
- */
-void adc0_isr()
-{
-    int16_t value;
-    analog_pin pin = analog_get_completed_pin(&value);
-
-    if (pin == ANALOG_PIN_NONE)
-        return; // spurious interrupt; don't know why
-    
-    if (pin == ANALOG_PIN_CALIB_COMPLETE)
-        return;
-
-    wk_send_port_event(PORT_GROUP_ANALOG_IN | pin, WK_EVENT_SINGLE_SAMPLE, 0, value);
-}
 
 
 /*
@@ -399,7 +325,7 @@ void wk_reset()
 {
     DEBUG_OUT("RST");
     digital_pin_reset();
-//    analog_reset();
+    analog_reset();
 //    pwm_reset();
 //    i2c_reset();
 }

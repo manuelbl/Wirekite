@@ -20,6 +20,7 @@ Once you have prepared the Teensy board ([one-time setup](docs/prepare_teensy.md
 - Analog input
 - PWM output
 - I2C
+- SPI(soon)
 
 
 ## Building the Teensy software yourself (rarely needed)
@@ -30,4 +31,4 @@ If still want to build it yourself, stick to this [guide](docs/build_wirekite.md
 
 ## Coming soon
 
-- Support for Teensy 3.2
+- SPI
