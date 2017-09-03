@@ -63,7 +63,7 @@ typedef uint8_t pwm_pin;
 void pwm_init();
 void pwm_timer_config(uint8_t timer, uint32_t frequency, uint16_t attributes);
 void pwm_channel_config(uint8_t timer, uint8_t channel, uint16_t attributes);
-pwm_pin pwm_pin_init(uint8_t pin);
+pwm_pin pwm_pin_init(uint8_t digi_pin);
 void pwm_pin_release(pwm_pin port_id);
 void pwm_pin_set_value(pwm_pin port_id, int16_t value);
 void pwm_reset();

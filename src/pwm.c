@@ -24,6 +24,7 @@ typedef struct {
     uint16_t alt : 3;
     uint16_t timer: 2;
     uint16_t channel : 3;
+    uint8_t  digi_pin;
 } pin_map_t;
 
 
@@ -31,34 +32,34 @@ typedef struct {
 
 // PWM pin map of Teensy LC
 static pin_map_t pin_map[] = {
-    { PORT_A, 1, 3, 2, 0 },   //  Pin 3    PTA1    TPM2_CH0
-    { PORT_A, 2, 3, 2, 1 },   //  Pin 4    PTA2    TPM2_CH1
-    { PORT_D, 4, 4, 0, 4 },   //  Pin 6    PTD4    TPM0_CH4
-    { PORT_C, 3, 4, 0, 2 },   //  Pin 9    PTC3    TPM0_CH2
-    { PORT_C, 4, 4, 0, 3 },   //  Pin 10   PTC4    TPM0_CH3
-    { PORT_B, 0, 3, 1, 0 },   //  Pin 16   PTB0    TPM1_CH0
-    { PORT_B, 1, 3, 1, 1 },   //  Pin 17   PTB1    TPM1_CH1
-    { PORT_D, 5, 4, 0, 5 },   //  Pin 20   PTD5    TPM0_CH5
-    { PORT_C, 1, 4, 0, 0 },   //  Pin 22   PTC1    TPM0_CH0
-    { PORT_C, 2, 4, 0, 1 }    //  Pin 23   PTC2    TPM0_CH1
+    { PORT_A,  1, 3, 2, 0,  3 },   //  Pin 3    PTA1    TPM2_CH0
+    { PORT_A,  2, 3, 2, 1,  4 },   //  Pin 4    PTA2    TPM2_CH1
+    { PORT_D,  4, 4, 0, 4,  6 },   //  Pin 6    PTD4    TPM0_CH4
+    { PORT_C,  3, 4, 0, 2,  9 },   //  Pin 9    PTC3    TPM0_CH2
+    { PORT_C,  4, 4, 0, 3, 10 },   //  Pin 10   PTC4    TPM0_CH3
+    { PORT_B,  0, 3, 1, 0, 16 },   //  Pin 16   PTB0    TPM1_CH0
+    { PORT_B,  1, 3, 1, 1, 17 },   //  Pin 17   PTB1    TPM1_CH1
+    { PORT_D,  5, 4, 0, 5, 20 },   //  Pin 20   PTD5    TPM0_CH5
+    { PORT_C,  1, 4, 0, 0, 22 },   //  Pin 22   PTC1    TPM0_CH0
+    { PORT_C,  2, 4, 0, 1, 23 }    //  Pin 23   PTC2    TPM0_CH1
 };
 
 #elif defined(__MK20DX256__)
 
 // PWM pin map of Teensy 3.2
 static pin_map_t pin_map[] = {
-    { PORT_A, 1, 3, 1, 0 },   //  Pin 3    PTA1    FTM1_CH0
-    { PORT_A, 2, 3, 1, 1 },   //  Pin 4    PTA2    FTM1_CH1
-    { PORT_D, 7, 4, 0, 7 },   //  Pin 5    PTD7    FTM0_CH7
-    { PORT_D, 4, 4, 0, 4 },   //  Pin 6    PTD4    FTM0_CH4
-    { PORT_C, 3, 4, 0, 2 },   //  Pin 9    PTC3    FTM0_CH2
-    { PORT_C, 4, 4, 0, 3 },   //  Pin 10   PTC4    FTM0_CH3
-    { PORT_D, 5, 4, 0, 5 },   //  Pin 20   PTD5    FTM0_CH5
-    { PORT_D, 6, 4, 0, 6 },   //  Pin 21   PTD6    FTM0_CH6
-    { PORT_C, 1, 4, 0, 0 },   //  Pin 22   PTC1    FTM0_CH0
-    { PORT_C, 2, 4, 0, 1 },   //  Pin 23   PTC2    FTM0_CH1
-    { PORT_B, 19, 3, 2, 1 },  //  Pin 25   PTB19   FTM2_CH1
-    { PORT_B, 18, 3, 2, 0 }   //  Pin 32   PTB18   FTM2_CH0
+    { PORT_A,  1, 3, 1, 0,  3 },   //  Pin 3    PTA1    FTM1_CH0
+    { PORT_A,  2, 3, 1, 1,  4 },   //  Pin 4    PTA2    FTM1_CH1
+    { PORT_D,  7, 4, 0, 7,  5 },   //  Pin 5    PTD7    FTM0_CH7
+    { PORT_D,  4, 4, 0, 4,  6 },   //  Pin 6    PTD4    FTM0_CH4
+    { PORT_C,  3, 4, 0, 2,  9 },   //  Pin 9    PTC3    FTM0_CH2
+    { PORT_C,  4, 4, 0, 3, 10 },   //  Pin 10   PTC4    FTM0_CH3
+    { PORT_D,  5, 4, 0, 5, 20 },   //  Pin 20   PTD5    FTM0_CH5
+    { PORT_D,  6, 4, 0, 6, 21 },   //  Pin 21   PTD6    FTM0_CH6
+    { PORT_C,  1, 4, 0, 0, 22 },   //  Pin 22   PTC1    FTM0_CH0
+    { PORT_C,  2, 4, 0, 1, 23 },   //  Pin 23   PTC2    FTM0_CH1
+    { PORT_B, 19, 3, 2, 1, 25 },   //  Pin 25   PTB19   FTM2_CH1
+    { PORT_B, 18, 3, 2, 0, 32 }    //  Pin 32   PTB18   FTM2_CH0
 };
 
 #endif
@@ -219,10 +220,17 @@ void pwm_channel_config(uint8_t timer, uint8_t channel, uint16_t attributes)
 }
 
 
-pwm_pin pwm_pin_init(uint8_t pin)
+pwm_pin pwm_pin_init(uint8_t digi_pin)
 {
-    if (pin >= NUM_PINS)
-        return PWM_PIN_ERROR;
+    pwm_pin pin = PWM_PIN_ERROR;
+    for (int i = 0; i < NUM_PINS; i++) {
+        if (pin_map[i].digi_pin == digi_pin) {
+            pin = (pwm_pin)i;
+            break;
+        }
+    }
+    if (pin == PWM_PIN_ERROR)
+        return pin;
 
     pwm_pin_set_value(pin, 0);
 
