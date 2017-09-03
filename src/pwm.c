@@ -9,6 +9,7 @@
 #include "pwm.h"
 #include "kinetis.h"
 #include "pwm_config.h"
+#include "debug.h"
 
 
 #define PORT_A 0
@@ -46,8 +47,8 @@ static pin_map_t pin_map[] = {
 
 // PWM pin map of Teensy 3.2
 static pin_map_t pin_map[] = {
-    { PORT_A, 1, 3, 0, 6 },   //  Pin 3    PTA1    FTM0_CH6 FTM1_CH0
-    { PORT_A, 2, 3, 0, 7 },   //  Pin 4    PTA2    FTM0_CH7 FTM1_CH1
+    { PORT_A, 1, 3, 1, 0 },   //  Pin 3    PTA1    FTM1_CH0
+    { PORT_A, 2, 3, 1, 1 },   //  Pin 4    PTA2    FTM1_CH1
     { PORT_D, 7, 4, 0, 7 },   //  Pin 5    PTD7    FTM0_CH7
     { PORT_D, 4, 4, 0, 4 },   //  Pin 6    PTD4    FTM0_CH4
     { PORT_C, 3, 4, 0, 2 },   //  Pin 9    PTC3    FTM0_CH2
@@ -65,29 +66,40 @@ static pin_map_t pin_map[] = {
 
 #define NUM_PINS (sizeof(pin_map)/sizeof(pin_map[0]))
 
+typedef struct __attribute__((packed, aligned(4))) {
+    volatile uint32_t SC; // Channel x Status And Control
+    volatile uint32_t V;  // Channel x Value
+} FTM_CHAN_t;
+
+typedef struct __attribute__((packed, aligned(4))) {
+    volatile uint32_t SC;   // Status And Control
+    volatile uint32_t CNT;  // Counter
+    volatile uint32_t MOD;  // Modulo
+    FTM_CHAN_t channel[8];
+} FTM_t;
 
 #if defined(__MKL26Z64__)
 // Teensy LC timers
 
-static volatile uint32_t* TPM_BASE_ADDR[] = {
-    &TPM0_SC,
-    &TPM1_SC,
-    &TPM2_SC
+static FTM_t* FTM[] = {
+    (FTM_t*)&TPM0_SC,
+    (FTM_t*)&TPM1_SC,
+    (FTM_t*)&TPM2_SC
 };
 
 #elif defined(__MK20DX256__)
-// PWM pin map of Teensy 3.2
+// Teensy 3.2 timers
 
-static volatile uint32_t* TPM_BASE_ADDR[] = {
-    &FTM0_SC,
-    &FTM1_SC,
-    &FTM2_SC,
-    &FTM3_SC
+static FTM_t* FTM[] = {
+    (FTM_t*)&FTM0_SC,
+    (FTM_t*)&FTM1_SC,
+    (FTM_t*)&FTM2_SC,
+    (FTM_t*)&FTM3_SC
 };
 
 #endif
 
-#define NUM_TIMERS (sizeof(TPM_BASE_ADDR)/sizeof(TPM_BASE_ADDR[0]))
+#define NUM_TIMERS (sizeof(FTM)/sizeof(FTM[0]))
 
 
 static volatile uint32_t* PCR_ADDR[] = {
@@ -100,7 +112,7 @@ static volatile uint32_t* PCR_ADDR[] = {
 
 #define PCR(map) (*(PCR_ADDR[map.port] + map.pin))
 
-static uint16_t modulos[] = { 0, 0, 0 };
+static uint16_t modulos[NUM_TIMERS];
 static int16_t  values[NUM_PINS];
 
 
@@ -115,6 +127,10 @@ void pwm_init()
     pwm_channel_config(0, 3, 0);
     pwm_channel_config(0, 4, 0);
     pwm_channel_config(0, 5, 0);
+#if defined(__MK20DX256__)
+    pwm_channel_config(0, 6, 0);
+    pwm_channel_config(0, 7, 0);
+#endif
 
     pwm_timer_config(1, 488, 0);
     pwm_channel_config(1, 0, 0);
@@ -130,12 +146,32 @@ void pwm_timer_config(uint8_t timer, uint32_t frequency, uint16_t attributes)
 {
     if (timer >= NUM_TIMERS)
         return;
+    
+    int clockSource;
+    int clock;
+
+#if defined(__MKL26Z64__)
+
+    clockSource = 1;
+    clock = F_TIMER;
+
+#elif defined(__MK20DX256__)
+
+    if (frequency < (F_TIMER >> 7) / 65536) {
+        clockSource = 2;
+        clock = 31250;
+    } else {
+        clockSource = 1;
+        clock = F_TIMER;
+    }
+
+#endif
 
     // Compute prescale factor and modulus.
     // Select the lowest prescale factor
     // given the condition that modulus must be <= 65536
     uint8_t prescale = 0;
-    uint32_t mod = (F_TIMER + (frequency >> 1)) / frequency;
+    uint32_t mod = (clock + (frequency >> 1)) / frequency;
     while (mod > 65536) {
         prescale++;
         mod >>= 1;
@@ -145,15 +181,15 @@ void pwm_timer_config(uint8_t timer, uint32_t frequency, uint16_t attributes)
     uint16_t modulo = mod - 1;
     modulos[timer] = modulo;
 
-    uint32_t sc = FTM_SC_CLKS(1) | FTM_SC_PS(prescale);
+    uint32_t sc = FTM_SC_CLKS(clockSource) | FTM_SC_PS(prescale);
     if (attributes & PWM_TIMER_ATTR_CENTER)
         sc |= FTM_SC_CPWMS;
 
-    volatile uint32_t* tpm_base = TPM_BASE_ADDR[timer];
-    *(tpm_base + 0) = 0; // TPMx_SC
-    *(tpm_base + 1) = 0; // TPMx_CNT
-    *(tpm_base + 2) = modulo; // TPMx_MOD
-    *(tpm_base + 0) = sc; // TPMx_SC
+    FTM_t* ftm = FTM[timer];
+    ftm->SC = 0;
+    ftm->CNT = 0;
+    ftm->MOD = modulo;
+    ftm->SC = sc;
 
     // recalculate values
     for (int i = 0; i < NUM_PINS; i++) {
@@ -167,13 +203,19 @@ void pwm_channel_config(uint8_t timer, uint8_t channel, uint16_t attributes)
 {
     if (timer >= NUM_TIMERS)
         return;
+
+#if defined(__MKL26Z64__)        
     if ((timer == 0 && channel >= 6) || (timer != 0 && channel >= 2))
         return;
+#elif defined(__MK20DX256__)
+    if ((timer == 0 && channel >= 8) || (timer != 0 && channel >= 2))
+        return;
+#endif
 
     uint32_t sc = (attributes & PWM_CHAN_ATTR_LOW_PULSE) ? 0b00100100 : 0b00101000;
-    volatile uint32_t* tpm_base = TPM_BASE_ADDR[timer];
-    *(tpm_base + 3 + channel * 2) = 0; // TPMx_CnSC
-    *(tpm_base + 3 + channel * 2) = sc; // TPMx_CnSC
+    FTM_t* ftm = FTM[timer];
+    ftm->channel[channel].SC = 0;
+    ftm->channel[channel].SC = sc;
 }
 
 
@@ -220,8 +262,7 @@ void pwm_pin_set_value(pwm_pin port_id, int16_t value)
     }
     values[port_id] = cval;
 
-    volatile uint32_t* value_ptr = TPM_BASE_ADDR[map.timer] + 4 + 2 * map.channel;
-    *value_ptr = cval;
+    FTM[map.timer]->channel[map.channel].V = cval;
 }
 
 

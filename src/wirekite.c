@@ -326,7 +326,7 @@ void wk_reset()
     DEBUG_OUT("RST");
     digital_pin_reset();
     analog_reset();
-//    pwm_reset();
+    pwm_reset();
 //    i2c_reset();
 }
 

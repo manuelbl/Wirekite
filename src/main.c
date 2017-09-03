@@ -25,9 +25,8 @@ void check_usb();
 extern int main(void)
 {
     mm_init(NULL, 0);
-
+    pwm_init();
     analog_init();
-//    pwm_init();
 //    i2c_init();
 
 #ifdef _DEBUG

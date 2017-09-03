@@ -15,6 +15,9 @@
 extern "C" {
 #endif
 
+#if defined(__MKL26Z64__)
+
+// Teensy LC
 #define PWM_PIN_3   0
 #define PWM_PIN_4   1
 #define PWM_PIN_6   2
@@ -25,6 +28,24 @@ extern "C" {
 #define PWM_PIN_20  7
 #define PWM_PIN_22  8
 #define PWM_PIN_23  9
+
+#elif defined(__MK20DX256__)
+
+#define PWM_PIN_3   0
+#define PWM_PIN_4   1
+#define PWM_PIN_5   2
+#define PWM_PIN_6   3
+#define PWM_PIN_9   4
+#define PWM_PIN_10  5
+#define PWM_PIN_20  6
+#define PWM_PIN_21  7
+#define PWM_PIN_22  8
+#define PWM_PIN_23  9
+#define PWM_PIN_25  10
+#define PWM_PIN_32  11
+
+
+#endif
 
 #define PWM_PIN_ERROR 0xff
 
