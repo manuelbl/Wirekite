@@ -48,8 +48,8 @@ static pin_map_t pin_map[] = {
 
 // PWM pin map of Teensy 3.2
 static pin_map_t pin_map[] = {
-    { PORT_A,  1, 3, 1, 0,  3 },   //  Pin 3    PTA1    FTM1_CH0
-    { PORT_A,  2, 3, 1, 1,  4 },   //  Pin 4    PTA2    FTM1_CH1
+    { PORT_A, 12, 3, 1, 0,  3 },   //  Pin 3    PTA12    FTM1_CH0
+    { PORT_A, 13, 3, 1, 1,  4 },   //  Pin 4    PTA13    FTM1_CH1
     { PORT_D,  7, 4, 0, 7,  5 },   //  Pin 5    PTD7    FTM0_CH7
     { PORT_D,  4, 4, 0, 4,  6 },   //  Pin 6    PTD4    FTM0_CH4
     { PORT_C,  3, 4, 0, 2,  9 },   //  Pin 9    PTC3    FTM0_CH2
