@@ -18,7 +18,11 @@ extern "C" {
 
 #define I2C_PINS_16_17  0
 #define I2C_PINS_19_18  1
+#if defined(__MKL26Z64__)
 #define I2C_PINS_22_23  2
+#elif defined(__MK20DX256__)
+#define I2C_PINS_29_30  2
+#endif
 #define I2C_PINS_MAX  2
 
 

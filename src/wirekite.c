@@ -327,7 +327,7 @@ void wk_reset()
     digital_pin_reset();
     analog_reset();
     pwm_reset();
-//    i2c_reset();
+    i2c_reset();
 }
 
 

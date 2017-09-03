@@ -43,18 +43,31 @@ typedef struct {
     uint32_t i2c_port : 3;
     uint32_t scl_port : 3;
     uint32_t sda_port : 3;
-    uint32_t scl_pin : 4;
-    uint32_t sda_pin : 4;
+    uint32_t scl_pin : 5;
+    uint32_t sda_pin : 5;
     uint32_t scl_alt : 3;
     uint32_t sda_alt : 3;
 } port_map_t;
 
+#if defined(__MKL26Z64__)
+
 // Pin/port mapping for Teensy LC
 static const port_map_t port_map[] = {
-    { 0, PORT_B, PORT_B, 0, 1, 2, 2 },  // I2C0 pin 16/17 PTB0/PTB1
-    { 0, PORT_B, PORT_B, 2, 3, 2, 2 },  // I2C0 pin 19/18 PTB2/PTB3
-    { 1, PORT_C, PORT_C, 1, 2, 2, 2 }   // I2C1 pin 22/23 PTC1/PTC2
+    { 0, PORT_B, PORT_B,  0,  1, 2, 2 },  // I2C0 pin 16/17 PTB0/PTB1
+    { 0, PORT_B, PORT_B,  2,  3, 2, 2 },  // I2C0 pin 19/18 PTB2/PTB3
+    { 1, PORT_C, PORT_C,  1,  2, 2, 2 }   // I2C1 pin 22/23 PTC1/PTC2
 };
+
+#elif defined(__MK20DX256__)
+
+// Pin/port mapping for Teensy 3.2
+static const port_map_t port_map[] = {
+    { 0, PORT_B, PORT_B,  0,  1, 2, 2 },  // I2C0 pin 16/17 PTB0/PTB1
+    { 0, PORT_B, PORT_B,  2,  3, 2, 2 },  // I2C0 pin 19/18 PTB2/PTB3
+    { 1, PORT_C, PORT_C, 10, 11, 2, 2 }   // I2C1 pin 29/30 PTC10/PTC11
+};
+
+#endif
 
 
 static volatile uint32_t* PCR_ADDR[] = {
