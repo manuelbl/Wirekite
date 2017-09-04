@@ -114,7 +114,7 @@ static volatile uint32_t* PCR_ADDR[] = {
 #define PCR(map) (*(PCR_ADDR[map.port] + map.pin))
 
 static uint16_t modulos[NUM_TIMERS];
-static int16_t  values[NUM_PINS];
+static int32_t  values[NUM_PINS];
 
 
 void pwm_init()
@@ -220,7 +220,7 @@ void pwm_channel_config(uint8_t timer, uint8_t channel, uint16_t attributes)
 }
 
 
-pwm_pin pwm_pin_init(uint8_t digi_pin)
+pwm_pin pwm_pin_init(uint8_t digi_pin, int32_t initial_value)
 {
     pwm_pin pin = PWM_PIN_ERROR;
     for (int i = 0; i < NUM_PINS; i++) {
@@ -232,10 +232,10 @@ pwm_pin pwm_pin_init(uint8_t digi_pin)
     if (pin == PWM_PIN_ERROR)
         return pin;
 
-    pwm_pin_set_value(pin, 0);
+    pwm_pin_set_value(pin, initial_value);
 
     pin_map_t map = pin_map[pin];
-    PCR(map) = PORT_PCR_MUX(map.alt) | PORT_PCR_DSE | PORT_PCR_SRE;
+    PCR(map) = PORT_PCR_MUX(map.alt) | PORT_PCR_SRE;
 
     return pin;
 }
@@ -245,30 +245,32 @@ void pwm_pin_release(pwm_pin port_id)
 {
     if (port_id >= NUM_PINS)
         return;
-        
-    pwm_pin_set_value(port_id, 0);
-    values[port_id] = -1;
 
     pin_map_t map = pin_map[port_id];
     PCR(map) = 0;
+        
+    pwm_pin_set_value(port_id, 0);
+    values[port_id] = -1;
 }
 
 
-void pwm_pin_set_value(pwm_pin port_id, int16_t value)
+void pwm_pin_set_value(pwm_pin port_id, int32_t value)
 {
     if (port_id >= NUM_PINS)
         return;
 
     pin_map_t map = pin_map[port_id];
-
+    values[port_id] = value;
+    
     // counter counts up to modulo + 1
-    // input value is between 0 (0% duty cycle) and 32767 (100% duty cycle)
+    // input value is between 0 (0% duty cycle) and 2'147'483'647 (100% duty cycle)
+    value >>= 16;
+    // input value is between 0 (0% duty cycle) and 32'767 (100% duty cycle)
     uint32_t cval = 0;
     if (value != 0) {
         uint16_t modulo = modulos[map.timer];
-        cval = ((uint32_t)value) * (((uint32_t)modulo) + 1) / 32767;
+        cval = value * (modulo + 1) / 32767;
     }
-    values[port_id] = cval;
 
     FTM[map.timer]->channel[map.channel].V = cval;
 }

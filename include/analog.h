@@ -54,7 +54,7 @@ analog_pin analog_pin_init(uint8_t pin_idx, uint16_t attributes, uint16_t trigge
 void analog_pin_release(analog_pin pin);
 void analog_request_conversion(analog_pin pin);
 
-analog_pin analog_get_completed_pin(int16_t* value);
+analog_pin analog_get_completed_pin(int32_t* value);
 void analog_reset();
 void analog_timer_tick();
 

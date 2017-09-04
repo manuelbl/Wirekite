@@ -152,7 +152,8 @@ void handle_config_request(wk_config_request* request)
             uint16_t port_id = 0;
             uint16_t optional1 = 0;
             if (request->port_type == WK_CFG_PORT_TYPE_DIGI_PIN) {
-                digital_pin pin = digital_pin_init(request->pin_config, request->port_attributes1 & 0x01, request->port_attributes1 & 0xfe);
+                digital_pin pin = digital_pin_init(request->pin_config, request->port_attributes1 & 0x01,
+                        request->port_attributes1 & 0xfe, (uint8_t)request->value1);
                 port_id = PORT_GROUP_DIGI_PIN | pin;
                 if ((request->port_attributes1 & 0x01) == DIGI_PIN_INPUT)
                     optional1 = digital_pin_get_input(pin);
@@ -161,7 +162,7 @@ void handle_config_request(wk_config_request* request)
                 if (pin != ANALOG_PIN_ERROR)
                     port_id = PORT_GROUP_ANALOG_IN | pin;
             } else if (request->port_type == WK_CFG_PORT_TYPE_PWM) {
-                pwm_pin pin = pwm_pin_init(request->pin_config);
+                pwm_pin pin = pwm_pin_init(request->pin_config, (int16_t)request->value1);
                 if (pin != PWM_PIN_ERROR)
                     port_id = PORT_GROUP_PWM | pin;
             } else if (request->port_type == WK_CFG_PORT_TYPE_I2C) {
@@ -222,7 +223,7 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
             if (port_group == PORT_GROUP_DIGI_PIN) {
                 digital_pin_set_output(request->port_id & PORT_GROUP_DETAIL_MASK, (uint8_t)request->value1);
             } else if (port_group == PORT_GROUP_PWM) {
-                pwm_pin_set_value(request->port_id & PORT_GROUP_DETAIL_MASK, (int16_t)request->value1);
+                pwm_pin_set_value(request->port_id & PORT_GROUP_DETAIL_MASK, (int32_t)request->value1);
             }
 
         } else if (request->action == WK_PORT_ACTION_GET_VALUE) {

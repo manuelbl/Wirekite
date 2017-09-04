@@ -35,7 +35,7 @@ extern "C" {
 
 typedef uint8_t digital_pin;
 
-digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attributes);
+digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attributes, uint8_t initial_value);
 void digital_pin_release(digital_pin pin);
 void digital_pin_set_output(digital_pin pin, uint8_t value);
 uint8_t digital_pin_get_input(digital_pin pin);

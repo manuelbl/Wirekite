@@ -140,7 +140,7 @@ static pin_info_t pins[NUM_PINS];
 static int8_t num_init_pins = 0;
 
 
-digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attributes)
+digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attributes, uint8_t initial_value)
 {
     if (pin_idx >= NUM_PINS)
         return DIGI_PIN_ERROR;
@@ -198,6 +198,8 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     if (direction == DIGI_PIN_INPUT) {
         GPIO_PORT[map.port]->PDDR &= ~mask;
     } else {
+        // set initial value
+        digital_pin_set_output(p, initial_value);
         GPIO_PORT[map.port]->PDDR |= mask;
     }
 
@@ -246,12 +248,12 @@ void digital_pin_release(digital_pin pin)
     *pcr_ptr = PORT_PCR_ISF;
 
     uint32_t mask = 1 << (uint32_t)map.pin;
-
-    // reset value
-    GPIO_PORT[map.port]->PCOR = mask;
     
     // reset direction
     GPIO_PORT[map.port]->PDDR &= ~mask;
+
+    // reset value
+    GPIO_PORT[map.port]->PCOR = mask;
 }
 
 

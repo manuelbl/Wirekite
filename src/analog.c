@@ -237,9 +237,9 @@ void start_conversion(uint8_t pin)
 }
 
 
-analog_pin analog_get_completed_pin(int16_t* value)
+analog_pin analog_get_completed_pin(int32_t* value)
 {
-    uint16_t v = 0;
+    uint32_t v = 0;
     uint8_t completed_conversion = running_conversion;
 
     if (completed_conversion == ANALOG_PIN_CALIB_0 || completed_conversion == ANALOG_PIN_CALIB_1) {
@@ -279,8 +279,8 @@ analog_pin analog_get_completed_pin(int16_t* value)
     } else {
         running_conversion = ANALOG_PIN_NONE;
     }
-    // extend value from 10bits to 15bits
-    *value = (v << 5) | (v >> 5);
+    // extend value from 10bits to 31bits
+    *value = (v << 21) | (v << 11) | (v << 1) | (v >> 9);
 
     return completed_conversion;
 }
@@ -428,7 +428,7 @@ void remove_trigger(uint8_t pin)
  */
 void adc0_isr()
 {
-    int16_t value;
+    int32_t value;
     analog_pin pin = analog_get_completed_pin(&value);
 
     if (pin == ANALOG_PIN_NONE)
