@@ -29,7 +29,7 @@ static wk_msg_header* partial_msg;
 static void handle_config_request(wk_config_request* request);
 static void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg);
 static void handle_message(wk_msg_header* msg, uint8_t take_ownership);
-static void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1);
+static void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1, uint32_t value1);
 static void wk_reset();
 
 
@@ -171,7 +171,7 @@ void handle_config_request(wk_config_request* request)
                     port_id = PORT_GROUP_I2C | port;
             }
             if (port_id != 0) {
-                send_config_response(WK_RESULT_OK, port_id, request->request_id, optional1);
+                send_config_response(WK_RESULT_OK, port_id, request->request_id, optional1, 0);
                 return;
             }
 
@@ -204,13 +204,31 @@ void handle_config_request(wk_config_request* request)
             } else if (request->port_type == WK_CFG_MODULE_PWM_CHANNEL) {
                 pwm_channel_config(request->pin_config, request->value1, request->port_attributes1);
             }
+
+        } else if (request->action == WK_CFG_ACTION_QUERY) {
+            uint32_t value = 0;
+            if (request->port_type == WK_CFG_QUERY_MEM_AVAIL) {
+                value = mm_avail();
+            } else if (request->port_type == WK_CFG_QUERY_MEM_MAX_BLOCK) {
+                value = mm_max_avail_block();
+            } else if (request->port_type == WK_CFG_QUERY_MEM_MCU) {
+#if defined(__MKL26Z64__)
+                value = WK_CFG_MCU_TEENSY_LC;
+#elif defined(__MK20DX256__)
+                value = WK_CFG_MCU_TEENSY_3_2;
+#endif
+            } else {
+                result = WK_RESULT_INV_DATA;
+            }
+            
+            send_config_response(result, request->port_id, request->request_id, 0, value);            
         
         } else {
             DEBUG_OUT("Invalid config msg");
         }
     }    
     
-    send_config_response(result, request->port_id, request->request_id, 0);
+    send_config_response(result, request->port_id, request->request_id, 0, 0);
 }
 
 
@@ -273,7 +291,7 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
 }
 
 
-void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1)
+void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1, uint32_t value1)
 {
     wk_config_response* response = (wk_config_response*) mm_alloc(sizeof(wk_config_response));
     if (response == NULL)
@@ -285,6 +303,7 @@ void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id
     response->port_id = port_id;
     response->request_id = request_id;
     response->optional1 = optional1;
+    response->value1 = value1;
     
     endp1_tx_msg(&response->header);
 }

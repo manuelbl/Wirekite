@@ -132,6 +132,35 @@ void mm_free(void* ptr)
 }
 
 
+uint32_t mm_avail()
+{
+    uint32_t size = 0;
+    chunk_t* curr = freelist.next;
+    
+    while (curr) {
+        size += curr->size;
+        curr = curr->next;
+    }
+    
+    return size;
+}
+
+
+uint32_t mm_max_avail_block()
+{
+    uint32_t max_avail = 0;
+    chunk_t* curr = freelist.next;
+    
+    while (curr) {
+        uint32_t s = curr->size;
+        if (s > max_avail)
+            max_avail = s;
+        curr = curr->next;
+    }
+    
+    return max_avail;
+}
+
 
 extern char *__brkval;
 

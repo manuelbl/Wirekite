@@ -26,6 +26,7 @@ extern "C" {
 #define WK_CFG_ACTION_RELEASE 2
 #define WK_CFG_ACTION_RESET 3
 #define WK_CFG_ACTION_CONFIG_MODULE 4
+#define WK_CFG_ACTION_QUERY 5
 
 #define WK_PORT_ACTION_SET_VALUE 1
 #define WK_PORT_ACTION_GET_VALUE 2
@@ -37,6 +38,13 @@ extern "C" {
 #define WK_CFG_PORT_TYPE_ANALOG_IN 2
 #define WK_CFG_PORT_TYPE_PWM 3
 #define WK_CFG_PORT_TYPE_I2C 4
+
+#define WK_CFG_QUERY_MEM_AVAIL 1
+#define WK_CFG_QUERY_MEM_MAX_BLOCK 2
+#define WK_CFG_QUERY_MEM_MCU 3
+
+#define WK_CFG_MCU_TEENSY_LC 1
+#define WK_CFG_MCU_TEENSY_3_2 2
 
 #define WK_CFG_MODULE_PWM_TIMER 1
 #define WK_CFG_MODULE_PWM_CHANNEL 2
@@ -76,6 +84,7 @@ typedef struct {
   uint16_t port_id;
   uint16_t request_id;
   uint16_t optional1;
+  uint32_t value1;
 } wk_config_response;
 
 

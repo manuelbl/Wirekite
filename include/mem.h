@@ -21,6 +21,10 @@ void mm_init(void* heap, uint32_t heap_len);
 void* mm_alloc(uint32_t size);
 // Free a memory block
 void mm_free(void* ptr);
+// Available memory
+uint32_t mm_avail();
+// Maximum available memory block
+uint32_t mm_max_avail_block();
 
  
 #ifdef __cplusplus
