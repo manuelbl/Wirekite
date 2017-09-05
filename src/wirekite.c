@@ -217,6 +217,8 @@ void handle_config_request(wk_config_request* request)
 #elif defined(__MK20DX256__)
                 value = WK_CFG_MCU_TEENSY_3_2;
 #endif
+            } else if (request->port_type == WK_CFG_QUERY_VERSION) {
+                value = 0x0040; // 0.40 in BCD
             } else {
                 result = WK_RESULT_INV_DATA;
             }

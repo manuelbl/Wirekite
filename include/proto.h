@@ -42,6 +42,7 @@ extern "C" {
 #define WK_CFG_QUERY_MEM_AVAIL 1
 #define WK_CFG_QUERY_MEM_MAX_BLOCK 2
 #define WK_CFG_QUERY_MEM_MCU 3
+#define WK_CFG_QUERY_VERSION 4
 
 #define WK_CFG_MCU_TEENSY_LC 1
 #define WK_CFG_MCU_TEENSY_3_2 2
