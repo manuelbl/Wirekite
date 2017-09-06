@@ -349,35 +349,30 @@ void porta_isr()
  }
  
  
- __attribute__((naked))
  void portb_isr()
  {
      porta_isr();
  }
  
  
- __attribute__((naked))
  void portc_isr()
  {
      porta_isr();
  }
  
  
- __attribute__((naked))
  void portd_isr()
  {
      porta_isr();
  }
  
  
- __attribute__((naked))
  void porte_isr()
  {
      porta_isr();
  }
  
  
- __attribute__((naked))
  void portcd_isr()
  {
      porta_isr();

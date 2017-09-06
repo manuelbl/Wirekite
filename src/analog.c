@@ -441,7 +441,6 @@ void adc0_isr()
 }
  
  
-__attribute__((naked))
 void adc1_isr()
 {
     adc0_isr();
