@@ -13,6 +13,7 @@
 #include "mem.h"
 #include "digital_pin.h"
 #include "i2c.h"
+#include "spi.h"
 #include "proto.h"
 #include "pwm.h"
 #include "usb.h"
@@ -169,6 +170,10 @@ void handle_config_request(wk_config_request* request)
                 i2c_port port = i2c_master_init(request->pin_config, request->port_attributes1, request->value1);
                 if (port != I2C_PORT_ERROR)
                     port_id = PORT_GROUP_I2C | port;
+            } else if (request->port_type == WK_CFG_PORT_TYPE_SPI) {
+                spi_port port = spi_master_init(request->pin_config, request->port_attributes2, request->port_attributes1, request->value1);
+                if (port != SPI_PORT_ERROR)
+                    port_id = PORT_GROUP_SPI | port;
             }
             if (port_id != 0) {
                 send_config_response(WK_RESULT_OK, port_id, request->request_id, optional1, 0);
@@ -189,6 +194,9 @@ void handle_config_request(wk_config_request* request)
             } else if (port_group == PORT_GROUP_I2C) {
                 i2c_port port = request->port_id & PORT_GROUP_DETAIL_MASK;
                 i2c_port_release(port);
+            } else if (port_group == PORT_GROUP_SPI) {
+                spi_port port = request->port_id & PORT_GROUP_DETAIL_MASK;
+                spi_port_release(port);
             } else {
                 result = WK_RESULT_INV_DATA;
             }
@@ -267,6 +275,18 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
                     request = request2;
                 }
                 i2c_master_start_send(request);                
+
+            } else if (port_group == PORT_GROUP_SPI) {
+                if (*deallocate_msg) {
+                    // take ownership
+                    *deallocate_msg = 0;
+                } else {
+                    // cannot take ownership; make copy
+                    wk_port_request* request2 = (wk_port_request*)mm_alloc(request->header.message_size);
+                    memcpy(request2, request, request->header.message_size);
+                    request = request2;
+                }
+                spi_master_start_send(request);                
             }
 
         } else if (request->action == WK_PORT_ACTION_RX_DATA) {
@@ -350,6 +370,7 @@ void wk_reset()
     analog_reset();
     pwm_reset();
     i2c_reset();
+    spi_reset();
 }
 
 

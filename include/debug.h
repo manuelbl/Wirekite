@@ -11,7 +11,7 @@
 // Switch to enable debugging output
 // Alternative: define it on the command line: -D_DEBUG
 #ifndef _DEBUG
-//#define _DEBUG
+#define _DEBUG
 #endif
 
 #ifdef _DEBUG

@@ -23,6 +23,7 @@ extern "C" {
 #define PORT_GROUP_ANALOG_IN 0x0200
 #define PORT_GROUP_PWM 0x0300
 #define PORT_GROUP_I2C 0x0400
+#define PORT_GROUP_SPI 0x0800
 
 
 void wk_check_usb_rx();

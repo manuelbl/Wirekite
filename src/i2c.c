@@ -195,9 +195,9 @@ static void dma_i2c1_isr();
 static void dma_isr_handler(uint8_t port);
 static void write_complete(i2c_port port, uint8_t status, uint16_t len);
 static void read_complete(i2c_port port, uint8_t status, uint16_t len);
-wk_port_request* get_next_request(i2c_port port);
-uint8_t append_request(i2c_port port, wk_port_request* msg);
-void clear_request_queue(i2c_port port);
+static wk_port_request* get_next_request(i2c_port port);
+static uint8_t append_request(i2c_port port, wk_port_request* msg);
+static void clear_request_queue(i2c_port port);
 
 
 void i2c_init()
