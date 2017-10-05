@@ -253,7 +253,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
     // initialize SPI module
     KINETISL_SPI_t* spi = get_spi_ctrl(spi_port);
 
-    uint8_t c1 = SPI_C1_SPIE | SPI_C1_MSTR;
+    uint8_t c1 = SPI_C1_SPIE | SPI_C1_MSTR | SPI_C1_SPE;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE2 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
         c1 |= SPI_C1_CPOL;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE1 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
@@ -359,10 +359,7 @@ void master_start_send_2(wk_port_request* request)
         dma_dest_byte_buffer(dma_rx, request->data, WK_PORT_REQUEST_DATA_LEN(pi->request));
         pi->sub_state = SUB_STATE_DMA;
         spi->C2 |= SPI_C2_RXDMAE;
-        spi->C1 |= SPI_C1_SPE;
         // DMA will start after first byte    
-    } else {
-        spi->C1 |= SPI_C1_SPE;
     }
 
     while ((spi->S & SPI_S_SPTEF) == 0)
@@ -464,7 +461,6 @@ void dma_tx_isr_handler(uint8_t port)
         }
         
         // disable DMA
-        spi->C1 &= ~SPI_C1_SPE;
         spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
         
         uint8_t status = SPI_STATUS_UNKNOWN;
@@ -488,8 +484,7 @@ void dma_rx_isr_handler(uint8_t port)
         dma_clear_complete(dma);
         dma_disable(dma);
         
-        // disable SPI
-        spi->C1 &= ~SPI_C1_SPE;
+        // disable DMA
         spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
         
         uint8_t status = SPI_STATUS_OK;
@@ -509,7 +504,6 @@ void dma_rx_isr_handler(uint8_t port)
         }
 
         // disable DMA
-        spi->C1 &= ~SPI_C1_SPE;
         spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
         
         uint8_t status = SPI_STATUS_UNKNOWN;
@@ -668,11 +662,8 @@ void spi_isr_handler(uint8_t port)
         DEBUG_OUT("Spurious SPI interrupt");
     }
     
-    if (completion_status != 0xff) {
-        // disable SPI
-        spi->C1 &= ~SPI_C1_SPE;
+    if (completion_status != 0xff)
         write_complete(port, completion_status, pi->processed);    
-    }
 }
 
 
