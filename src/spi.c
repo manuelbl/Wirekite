@@ -313,7 +313,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
 void spi_master_start_send(wk_port_request* request)
 {
     // take ownership of request; release it when the transmission is done
-    spi_port port = (uint8_t) request->port_id;
+    spi_port port = (uint8_t) request->header.port_id;
 
     // if SPI port busy then queue request
     if (port_info[port].state != STATE_WAITING) {
@@ -330,7 +330,7 @@ void spi_master_start_send(wk_port_request* request)
 void master_start_send_2(wk_port_request* request)
 {
     // take ownership of request; release it when the transmission is done
-    spi_port port = (uint8_t) request->port_id;
+    spi_port port = (uint8_t) request->header.port_id;
 
     // chip select
     digital_pin cs = request->action_attribute2;
@@ -550,8 +550,8 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
     // save relevant values
     spi_port_info_t* pi = &port_info[port];
     wk_port_request* request = pi->request;
-    uint16_t port_id = request->port_id;
-    uint16_t request_id = request->request_id;
+    uint16_t port_id = request->header.port_id;
+    uint16_t request_id = request->header.request_id;
 
     // chip select
     digital_pin cs = request->action_attribute2;

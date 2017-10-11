@@ -64,6 +64,8 @@ typedef struct {
   uint16_t message_size;
   uint8_t message_type;
   uint8_t reserved0;
+  uint16_t port_id;
+  uint16_t request_id;
 } wk_msg_header;
 
 
@@ -71,8 +73,6 @@ typedef struct {
   wk_msg_header header;
   uint8_t action;
   uint8_t port_type;
-  uint16_t port_id;
-  uint16_t request_id;
   uint16_t pin_config;
   uint32_t value1;
   uint16_t port_attributes1;
@@ -83,8 +83,6 @@ typedef struct {
 typedef struct {
   wk_msg_header header;
   uint16_t result;
-  uint16_t port_id;
-  uint16_t request_id;
   uint16_t optional1;
   uint32_t value1;
 } wk_config_response;
@@ -92,11 +90,9 @@ typedef struct {
 
 typedef struct {
   wk_msg_header header;
-  uint16_t port_id;
   uint8_t action;
   uint8_t action_attribute1;
   uint16_t action_attribute2;
-  uint16_t request_id;
   uint32_t value1;
   uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_request;
@@ -107,11 +103,9 @@ typedef struct {
 
 typedef struct {
   wk_msg_header header;
-  uint16_t port_id;
   uint8_t event;
   uint8_t event_attribute1;
   uint16_t event_attribute2;
-  uint16_t request_id;
   uint32_t value1;
   uint8_t data[4]; // variable length; can be 0 bytes
 } wk_port_event;

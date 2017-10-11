@@ -297,7 +297,7 @@ void i2c_port_reset(i2c_port port)
 void i2c_master_start_send(wk_port_request* request)
 {
     // take ownership of request; release it when the transmission is done
-    i2c_port port = request->port_id;
+    i2c_port port = request->header.port_id;
 
     // if I2C port busy then queue request
     if (port_info[port].state != STATE_WAITING) {
@@ -314,7 +314,7 @@ void i2c_master_start_send(wk_port_request* request)
 void master_start_send_2(wk_port_request* request)
 {
     // take ownership of request; release it when the transmission is done
-    i2c_port port = request->port_id;
+    i2c_port port = request->header.port_id;
 
     // reset flags
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
@@ -359,7 +359,7 @@ void master_start_send_2(wk_port_request* request)
 
 void i2c_master_start_recv(wk_port_request* request)
 {
-    i2c_port port = request->port_id;
+    i2c_port port = request->header.port_id;
     
     // if port is busy copy the request and queue it
     if (port_info[port].state != STATE_WAITING) {
@@ -382,11 +382,11 @@ void i2c_master_start_recv(wk_port_request* request)
 
 void master_start_recv_2(wk_port_request* request)
 {
-    i2c_port port = request->port_id;
+    i2c_port port = request->header.port_id;
     
     // allocate response with RX buffer
     port_info_t* pi = &port_info[port];
-    pi->response = create_response(request->port_id, request->request_id, (uint16_t)request->value1);
+    pi->response = create_response(request->header.port_id, request->header.request_id, (uint16_t)request->value1);
     if (pi->response == NULL)
         return;
 
@@ -408,8 +408,8 @@ void switch_to_recv(i2c_port port)
     wk_port_request* request = pi->request;
 
     // retain relevant data
-    uint16_t port_id = request->port_id;
-    uint16_t request_id = request->request_id;
+    uint16_t port_id = request->header.port_id;
+    uint16_t request_id = request->header.request_id;
     uint16_t rx_size = (uint16_t)request->value1;
     uint16_t slave_addr = request->action_attribute2;
 
@@ -483,8 +483,8 @@ wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t r
         
     response->header.message_size = msg_size;
     response->header.message_type = WK_MSG_TYPE_PORT_EVENT;
-    response->port_id = port_id;
-    response->request_id = request_id;
+    response->header.port_id = port_id;
+    response->header.request_id = request_id;
     response->event = WK_EVENT_DATA_RECV;
     return response;
 }
@@ -777,8 +777,8 @@ void write_complete(i2c_port port, uint8_t status, uint16_t len)
 {
     // save relevant values
     port_info_t* pi = &port_info[port];
-    uint16_t port_id = pi->request->port_id;
-    uint16_t request_id = pi->request->request_id;
+    uint16_t port_id = pi->request->header.port_id;
+    uint16_t request_id = pi->request->header.request_id;
 
     // free request
     mm_free(pi->request);

@@ -176,26 +176,26 @@ void handle_config_request(wk_config_request* request)
                     port_id = PORT_GROUP_SPI | port;
             }
             if (port_id != 0) {
-                send_config_response(WK_RESULT_OK, port_id, request->request_id, optional1, 0);
+                send_config_response(WK_RESULT_OK, port_id, request->header.request_id, optional1, 0);
                 return;
             }
 
         } else if (request->action == WK_CFG_ACTION_RELEASE) {
-            uint16_t port_group = request->port_id & PORT_GROUP_MASK;
+            uint16_t port_group = request->header.port_id & PORT_GROUP_MASK;
             if (port_group == PORT_GROUP_DIGI_PIN) {
-                digital_pin pin = request->port_id & PORT_GROUP_DETAIL_MASK;
+                digital_pin pin = request->header.port_id & PORT_GROUP_DETAIL_MASK;
                 digital_pin_release(pin);
             } else if (port_group == PORT_GROUP_ANALOG_IN) {
-                analog_pin pin = request->port_id & PORT_GROUP_DETAIL_MASK;
+                analog_pin pin = request->header.port_id & PORT_GROUP_DETAIL_MASK;
                 analog_pin_release(pin);
             } else if (port_group == PORT_GROUP_PWM) {
-                pwm_pin pin = request->port_id & PORT_GROUP_DETAIL_MASK;
+                pwm_pin pin = request->header.port_id & PORT_GROUP_DETAIL_MASK;
                 pwm_pin_release(pin);
             } else if (port_group == PORT_GROUP_I2C) {
-                i2c_port port = request->port_id & PORT_GROUP_DETAIL_MASK;
+                i2c_port port = request->header.port_id & PORT_GROUP_DETAIL_MASK;
                 i2c_port_release(port);
             } else if (port_group == PORT_GROUP_SPI) {
-                spi_port port = request->port_id & PORT_GROUP_DETAIL_MASK;
+                spi_port port = request->header.port_id & PORT_GROUP_DETAIL_MASK;
                 spi_port_release(port);
             } else {
                 result = WK_RESULT_INV_DATA;
@@ -226,19 +226,19 @@ void handle_config_request(wk_config_request* request)
                 value = WK_CFG_MCU_TEENSY_3_2;
 #endif
             } else if (request->port_type == WK_CFG_QUERY_VERSION) {
-                value = 0x0040; // 0.40 in BCD
+                value = 0x0050; // 0.50 in BCD
             } else {
                 result = WK_RESULT_INV_DATA;
             }
             
-            send_config_response(result, request->port_id, request->request_id, 0, value);            
+            send_config_response(result, request->header.port_id, request->header.request_id, 0, value);            
         
         } else {
             DEBUG_OUT("Invalid config msg");
         }
     }    
     
-    send_config_response(result, request->port_id, request->request_id, 0, 0);
+    send_config_response(result, request->header.port_id, request->header.request_id, 0, 0);
 }
 
 
@@ -246,21 +246,21 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
 {
     if (request->header.message_size >= WK_PORT_REQUEST_ALLOC_SIZE(0)) {
 
-        uint16_t port_group = request->port_id & PORT_GROUP_MASK;
+        uint16_t port_group = request->header.port_id & PORT_GROUP_MASK;
         if (request->action == WK_PORT_ACTION_SET_VALUE) {
             if (port_group == PORT_GROUP_DIGI_PIN) {
-                digital_pin_set_output(request->port_id & PORT_GROUP_DETAIL_MASK, (uint8_t)request->value1);
+                digital_pin_set_output(request->header.port_id & PORT_GROUP_DETAIL_MASK, (uint8_t)request->value1);
             } else if (port_group == PORT_GROUP_PWM) {
-                pwm_pin_set_value(request->port_id & PORT_GROUP_DETAIL_MASK, (int32_t)request->value1);
+                pwm_pin_set_value(request->header.port_id & PORT_GROUP_DETAIL_MASK, (int32_t)request->value1);
             }
 
         } else if (request->action == WK_PORT_ACTION_GET_VALUE) {
             if (port_group == PORT_GROUP_DIGI_PIN) {
-                uint8_t value = digital_pin_get_input(request->port_id & PORT_GROUP_DETAIL_MASK);
-                wk_send_port_event(request->port_id, WK_EVENT_SINGLE_SAMPLE, request->request_id, value);
+                uint8_t value = digital_pin_get_input(request->header.port_id & PORT_GROUP_DETAIL_MASK);
+                wk_send_port_event(request->header.port_id, WK_EVENT_SINGLE_SAMPLE, request->header.request_id, value);
 
             } else if (port_group == PORT_GROUP_ANALOG_IN) {
-                analog_request_conversion(request->port_id & PORT_GROUP_DETAIL_MASK);
+                analog_request_conversion(request->header.port_id & PORT_GROUP_DETAIL_MASK);
             }
 
         } else if (request->action == WK_PORT_ACTION_TX_DATA) {
@@ -322,8 +322,8 @@ void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id
     response->header.message_size = sizeof(wk_config_response);
     response->header.message_type = WK_MSG_TYPE_CONFIG_RESPONSE;
     response->result = result;
-    response->port_id = port_id;
-    response->request_id = request_id;
+    response->header.port_id = port_id;
+    response->header.request_id = request_id;
     response->optional1 = optional1;
     response->value1 = value1;
     
@@ -346,12 +346,12 @@ void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, ui
 
     event->header.message_size = msg_size;
     event->header.message_type = WK_MSG_TYPE_PORT_EVENT;
-    event->port_id = port_id;
+    event->header.port_id = port_id;
     event->event = evt;
     event->event_attribute1 = attr1;
     event->event_attribute2 = attr2;
     event->value1 = value1;
-    event->request_id = request_id;
+    event->header.request_id = request_id;
     if (data_len > 0)
         memcpy(event->data, data, data_len);
         
