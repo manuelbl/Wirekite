@@ -11,7 +11,7 @@
 // Switch to enable debugging output
 // Alternative: define it on the command line: -D_DEBUG
 #ifndef _DEBUG
-#define _DEBUG
+//#define _DEBUG
 #endif
 
 #ifdef _DEBUG
@@ -19,11 +19,11 @@
 #include "uart.h"
 #include "util.h"
 
-#define DEBUG_OUT(s) uart0_println(s)
+#define DEBUG_OUT(s) do { uart0_println(s); } while(0)
 
 #else
 
-#define DEBUG_OUT(s)
+#define DEBUG_OUT(s) do { } while(0)
 
 #endif
 

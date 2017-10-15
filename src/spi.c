@@ -350,31 +350,38 @@ void master_start_send_2(wk_port_request* request)
     uint8_t dma_tx = pi->dma_tx;
     uint8_t dma_rx = pi->dma_rx;
     
-    uint8_t use_dma = dma_tx != DMA_CHANNEL_ERROR && WK_PORT_REQUEST_DATA_LEN(pi->request) > 3;
+    uint16_t data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
+    uint8_t use_dma = dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
     if (use_dma) {
         // switch to DMA for bulk of data
-        dma_source_byte_buffer(dma_tx, request->data + 1, WK_PORT_REQUEST_DATA_LEN(pi->request) - 1);
+        dma_source_byte_buffer(dma_tx, request->data + 1, data_len - 1);
         dma_dest_byte(dma_tx, &spi->DL);
         dma_source_byte(dma_rx, &spi->DL);
-        dma_dest_byte_buffer(dma_rx, request->data, WK_PORT_REQUEST_DATA_LEN(pi->request));
+        dma_dest_byte_buffer(dma_rx, request->data, data_len);
         pi->sub_state = SUB_STATE_DMA;
-        spi->C2 |= SPI_C2_RXDMAE;
         // DMA will start after first byte    
     }
 
-    while ((spi->S & SPI_S_SPTEF) == 0)
-        ;
-
-    if (use_dma) {
-        dma_enable(dma_tx);
-        dma_enable(dma_rx);
+    while ((spi->S & SPI_S_SPTEF) == 0) {
+        __asm__ volatile ("nop");
     }
 
     // transmit first byte
     spi->DL = request->data[0];
 
-    if (use_dma)
-        spi->C2 |= SPI_C2_TXDMAE;
+    // Pause for an instant.
+    // Otherwise TX DMA kicks in too early,
+    // transmission starts with second byte and TX DAM
+    // never completes as one byte too few is received.
+    for (int i = 0; i < 10; i++) {
+        __asm__ volatile ("nop");
+    }
+
+    if (use_dma) {
+        dma_enable(dma_rx);
+        dma_enable(dma_tx);
+        spi->C2 |= SPI_C2_TXDMAE | SPI_C2_RXDMAE;
+    }
 }
 
 
@@ -438,7 +445,7 @@ void dma_tx_isr_handler(uint8_t port)
     return; // oops
 
     // DMA has written last byte to data register; SPI starts to send last byte
-    if (dma_is_complete(dma)) {            
+    if (dma_is_complete(dma)) {
         dma_clear_interrupt(dma);
         dma_clear_complete(dma);
         
@@ -479,7 +486,7 @@ void dma_rx_isr_handler(uint8_t port)
         return; // oops
 
     // DMA has read last byte from data register
-    if (dma_is_complete(dma)) {            
+    if (dma_is_complete(dma)) {
         dma_clear_interrupt(dma);
         dma_clear_complete(dma);
         dma_disable(dma);

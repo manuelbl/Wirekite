@@ -60,6 +60,7 @@ void wk_check_usb_rx()
             msg_size += ((uint16_t)rx_buf[0]) << 8;
             partial_msg = (wk_msg_header*)mm_alloc(msg_size);
             partial_msg->message_size = msg_size;
+            DEBUG_OUT("Super special case");
         }
 
         uint16_t len = rx_size;
@@ -92,6 +93,7 @@ void wk_check_usb_rx()
 
         if (size < 8) {
             // oops?!
+            DEBUG_OUT("Ooops");
             endp2_consume_rx_buffer();
             __enable_irq();
             return;
@@ -116,6 +118,8 @@ void wk_check_usb_rx()
             // allocate buffer
             wk_msg_header* hdr = (wk_msg_header*) rx_buf;
             msg_size = hdr->message_size;
+            if (partial_msg != NULL)
+                DEBUG_OUT("Lost it");
             partial_msg = (wk_msg_header*)mm_alloc(msg_size);
             partial_size = rx_size;
             if (partial_msg != NULL)

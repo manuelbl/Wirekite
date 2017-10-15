@@ -874,11 +874,11 @@ restart:
         uint8_t stat = USB0_STAT;
         uint8_t endpoint = stat >> 4;
 
-#ifdef _DEBUG
-        char debug[] = "TOKDNE xx";
-        bytes_to_hex(debug + 7, &endpoint, 1);
-        DEBUG_OUT(debug);
-#endif
+//#ifdef _DEBUG
+//        char debug[] = "TOKDNE xx";
+//        bytes_to_hex(debug + 7, &endpoint, 1);
+//        DEBUG_OUT(debug);
+//#endif
 
         if (endpoint == 0) {
             endp0_handler(stat);
