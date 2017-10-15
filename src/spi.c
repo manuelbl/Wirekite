@@ -168,6 +168,7 @@ static void dma_spi1_tx_isr();
 static void dma_spi1_rx_isr();
 static void set_frequency(KINETISL_SPI_t* spi, uint32_t bus_rate, uint32_t frequency);
 static void master_start_send_2(wk_port_request* request);
+static void set_digital_output_2(wk_port_request* request);
 static void write_complete(spi_port port, uint8_t status, uint16_t len);
 static wk_port_request* get_next_request(spi_port port);
 static uint8_t append_request(spi_port port, wk_port_request* request);
@@ -375,6 +376,41 @@ void master_start_send_2(wk_port_request* request)
 }
 
 
+void spi_set_digital_output(wk_port_request* request)
+{
+    // take ownership of request; release it when the transmission is done
+    spi_port port = (uint8_t) request->action_attribute2;
+
+    // if SPI port busy then queue request
+    if (port_info[port].state != STATE_WAITING) {
+        uint8_t success = append_request(port, request);
+        if (!success)
+            mm_free(request);
+        return;
+    }
+
+    set_digital_output_2(request);
+}
+
+
+void set_digital_output_2(wk_port_request* request)
+{
+    spi_port port = (uint8_t) request->action_attribute2;
+    digital_pin pin = request->header.port_id & PORT_GROUP_DETAIL_MASK;
+    digital_pin_set_output(pin, (uint8_t)request->value1);
+
+    // free request
+    uint16_t request_id = request->header.request_id;
+    uint16_t port_id = request->header.port_id;
+    mm_free(request);
+
+    // send completion message
+    wk_send_port_event_2(port_id, WK_EVENT_SET_DONE, request_id, 0, 0, 0, NULL, 0);
+
+    check_queue(port);
+}
+
+
 void set_frequency(KINETISL_SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
 {
     uint16_t target_div = (bus_rate + frequency / 2) / frequency;
@@ -566,7 +602,7 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
         digital_pin_set_output(cs, 1);
     
     // free request
-    mm_free(pi->request);
+    mm_free(request);
     pi->request = NULL;
     pi->state = STATE_WAITING;
 
@@ -585,11 +621,14 @@ void check_queue(spi_port port)
     if (request == NULL)
         return;
 
-//    if (request->action == WK_PORT_ACTION_RX_DATA) {
+    if (request->action == WK_PORT_ACTION_TX_DATA) {
+        master_start_send_2(request);
+    } else if (request->action == WK_PORT_ACTION_SET_VALUE) {
+        set_digital_output_2(request);
+    }
+//    } else if (request->action == WK_PORT_ACTION_RX_DATA) {
 //        master_start_recv_2(request);
 //        mm_free(request);
-//    } else {
-        master_start_send_2(request);
 //    }
 }
 

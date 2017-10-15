@@ -58,6 +58,7 @@ extern "C" {
 #define WK_EVENT_SINGLE_SAMPLE 1
 #define WK_EVENT_TX_COMPLETE 2
 #define WK_EVENT_DATA_RECV 3
+#define WK_EVENT_SET_DONE 4
 
 
 typedef struct {

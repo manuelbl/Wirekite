@@ -32,6 +32,7 @@ static void handle_port_request(wk_port_request* request, uint8_t* deallocate_ms
 static void handle_message(wk_msg_header* msg, uint8_t take_ownership);
 static void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1, uint32_t value1);
 static void wk_reset();
+static void take_ownership_or_copy(wk_port_request** request, uint8_t* deallocate_msg);
 
 
 void wk_check_usb_rx()
@@ -253,7 +254,12 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
         uint16_t port_group = request->header.port_id & PORT_GROUP_MASK;
         if (request->action == WK_PORT_ACTION_SET_VALUE) {
             if (port_group == PORT_GROUP_DIGI_PIN) {
-                digital_pin_set_output(request->header.port_id & PORT_GROUP_DETAIL_MASK, (uint8_t)request->value1);
+                if (request->action_attribute2 == 0) {
+                    digital_pin_set_output(request->header.port_id & PORT_GROUP_DETAIL_MASK, (uint8_t)request->value1);
+                } else if ((request->action_attribute2 & PORT_GROUP_MASK) == PORT_GROUP_SPI) {
+                    take_ownership_or_copy(&request, deallocate_msg);
+                    spi_set_digital_output(request);
+                }
             } else if (port_group == PORT_GROUP_PWM) {
                 pwm_pin_set_value(request->header.port_id & PORT_GROUP_DETAIL_MASK, (int32_t)request->value1);
             }
@@ -269,27 +275,11 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
 
         } else if (request->action == WK_PORT_ACTION_TX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
-                if (*deallocate_msg) {
-                    // take ownership
-                    *deallocate_msg = 0;
-                } else {
-                    // cannot take ownership; make copy
-                    wk_port_request* request2 = (wk_port_request*)mm_alloc(request->header.message_size);
-                    memcpy(request2, request, request->header.message_size);
-                    request = request2;
-                }
+                take_ownership_or_copy(&request, deallocate_msg);
                 i2c_master_start_send(request);                
 
             } else if (port_group == PORT_GROUP_SPI) {
-                if (*deallocate_msg) {
-                    // take ownership
-                    *deallocate_msg = 0;
-                } else {
-                    // cannot take ownership; make copy
-                    wk_port_request* request2 = (wk_port_request*)mm_alloc(request->header.message_size);
-                    memcpy(request2, request, request->header.message_size);
-                    request = request2;
-                }
+                take_ownership_or_copy(&request, deallocate_msg);
                 spi_master_start_send(request);                
             }
 
@@ -300,19 +290,25 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
 
         } else if (request->action == WK_PORT_ACTION_TX_N_RX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
-                if (*deallocate_msg) {
-                    // take ownership
-                    *deallocate_msg = 0;
-                } else {
-                    // cannot take ownership; make copy
-                    wk_port_request* request2 = (wk_port_request*)mm_alloc(request->header.message_size);
-                    memcpy(request2, request, request->header.message_size);
-                    request = request2;
-                }
+                take_ownership_or_copy(&request, deallocate_msg);
                 i2c_master_start_send(request);
             }
 
         }
+    }
+}
+
+
+void take_ownership_or_copy(wk_port_request** request, uint8_t* deallocate_msg)
+{
+    if (*deallocate_msg) {
+        // take ownership
+        *deallocate_msg = 0;
+    } else {
+        // cannot take ownership; make copy
+        wk_port_request* request2 = (wk_port_request*)mm_alloc((*request)->header.message_size);
+        memcpy(request2, *request, (*request)->header.message_size);
+        *request = request2;
     }
 }
 

@@ -532,7 +532,7 @@ stall:
  * Endpoint 1 handler
  */
 
-#define TX_NUM_BUFFERS 20
+#define TX_NUM_BUFFERS 40
 
 static wk_msg_header* circ_tx_buf[TX_NUM_BUFFERS];
 static uint8_t circ_tx_head;
@@ -658,6 +658,7 @@ void endp1_append_buffer(wk_msg_header* buf) {
         circ_tx_head = head;
     } else {
         // drop the buffer
+        DEBUG_OUT("USB out overflow");
         mm_free(buf);
     }
 }
