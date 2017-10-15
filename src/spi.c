@@ -303,7 +303,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
     } else {
         // both DMA channels or none
         dma_release_channel(dma_tx);
-        dma_tx = DMA_CHANNEL_ERROR;
+        pi->dma_tx = DMA_CHANNEL_ERROR;
     }
 
     return spi_port;
@@ -362,20 +362,10 @@ void master_start_send_2(wk_port_request* request)
         // DMA will start after first byte    
     }
 
-    while ((spi->S & SPI_S_SPTEF) == 0) {
-        __asm__ volatile ("nop");
-    }
+    while ((spi->S & SPI_S_SPTEF) == 0);
 
     // transmit first byte
     spi->DL = request->data[0];
-
-    // Pause for an instant.
-    // Otherwise TX DMA kicks in too early,
-    // transmission starts with second byte and TX DAM
-    // never completes as one byte too few is received.
-    for (int i = 0; i < 10; i++) {
-        __asm__ volatile ("nop");
-    }
 
     if (use_dma) {
         dma_enable(dma_rx);
@@ -442,29 +432,21 @@ void dma_tx_isr_handler(uint8_t port)
     uint8_t dma = pi->dma_tx;
 
     if (dma == DMA_CHANNEL_ERROR)
-    return; // oops
+        return; // oops
 
-    // DMA has written last byte to data register; SPI starts to send last byte
-    if (dma_is_complete(dma)) {
-        dma_clear_interrupt(dma);
-        dma_clear_complete(dma);
-        
-        // disable TX DMA
-        spi->C2 &= ~SPI_C2_TXDMAE;
-
-        // no further action; the last byte is still being received
-        
-    } else {
+    if (dma_is_error(dma)) {
+        // If this error handling code is ever executed, it is most likely a software bug.
+        // In SPI, there are no ACKs. And the master cannot recognize if the
+        // slave has received or transmitted something or even exists.
         uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) + 1;
-        dma_disable(dma);
-        dma_clear_interrupt(dma);
         dma_clear_error(dma);
 
+        // disable RX DMA
         uint8_t dma_rx = pi->dma_rx;
         if (dma_rx != DMA_CHANNEL_ERROR) {
             dma_disable(dma_rx);
-            dma_clear_interrupt(dma_rx);
             dma_clear_error(dma_rx);
+            dma_clear_interrupt(dma_rx);
         }
         
         // disable DMA
@@ -472,7 +454,21 @@ void dma_tx_isr_handler(uint8_t port)
         
         uint8_t status = SPI_STATUS_UNKNOWN;
         write_complete(port, status, processed);
+
+    // DMA has written last byte to data register; SPI starts to send last byte
+    } else if (dma_is_complete(dma)) {
+        // disable TX DMA
+        spi->C2 &= ~SPI_C2_TXDMAE;
+        dma_clear_complete(dma);        
+        // no further action; the last byte is still being received
+
+    } else {
+        return; // oops
     }
+
+    // disable TX DMA
+    dma_disable(dma);
+    dma_clear_interrupt(dma);
 }
 
 
@@ -485,24 +481,17 @@ void dma_rx_isr_handler(uint8_t port)
     if (dma == DMA_CHANNEL_ERROR)
         return; // oops
 
-    // DMA has read last byte from data register
-    if (dma_is_complete(dma)) {
-        dma_clear_interrupt(dma);
-        dma_clear_complete(dma);
-        dma_disable(dma);
+    uint8_t status;
+    uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma);
         
-        // disable DMA
-        spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
-        
-        uint8_t status = SPI_STATUS_OK;
-        write_complete(port, status, WK_PORT_REQUEST_DATA_LEN(pi->request));
-        
-    } else {
-        uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) + 1;
-        dma_disable(dma);
-        dma_clear_interrupt(dma);
+    if (dma_is_error(dma)) {
+        // If this error handling code is ever executed, it is most likely a software bug.
+        // In SPI, there are no ACKs. And the master cannot recognize if the
+        // slave has received or transmitted something or even exists.
+
         dma_clear_error(dma);
 
+        // disable TX DMA
         uint8_t dma_tx = pi->dma_tx;
         if (dma_tx != DMA_CHANNEL_ERROR) {
             dma_disable(dma_tx);
@@ -510,12 +499,23 @@ void dma_rx_isr_handler(uint8_t port)
             dma_clear_error(dma_tx);
         }
 
-        // disable DMA
-        spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
-        
-        uint8_t status = SPI_STATUS_UNKNOWN;
-        write_complete(port, status, processed);
+        status = SPI_STATUS_UNKNOWN;
+
+    // DMA has read last byte from data register
+    } else if (dma_is_complete(dma)) {
+        dma_clear_complete(dma);        
+        status = SPI_STATUS_OK;
+    
+    } else {
+        return; // oops
     }
+
+    // disable RX DMA
+    spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
+    dma_disable(dma);
+    dma_clear_interrupt(dma);
+
+    write_complete(port, status, processed);        
 }
 
 
