@@ -29,14 +29,16 @@
 #include <unistd.h>
 #include "kinetis.h"
 #include "mem.h"
+#include "debug.h"
 
 
-typedef struct chunk_t {
+typedef struct __attribute__((packed, aligned(4))) chunk_t {
     uint32_t size;
     struct chunk_t* next;
 } chunk_t;
 
 static chunk_t freelist;
+static void* heap_start;
 
 #define NO_SIZE 0xffffffff
 
@@ -54,8 +56,11 @@ void mm_init(void* heap, uint32_t heap_len)
     chunk_t* chunk = (chunk_t*)heap;
     chunk->size = heap_len;
     chunk->next = NULL;
+    freelist.size = heap_len;
     freelist.next = chunk;
+    heap_start = heap;
 }
+
 
 void* mm_alloc(uint32_t size)
 {
@@ -79,8 +84,10 @@ void* mm_alloc(uint32_t size)
         curr = curr->next;
     }
     
-    if (smallest_size == NO_SIZE)
+    if (smallest_size == NO_SIZE) {
+        DEBUG_OUT("Out of memory");
         return NULL; // no sufficiently large chunk left
+    }
     
     uint32_t* p;
     chunk_t* chunk = smallest_size_prev->next;
@@ -160,6 +167,82 @@ uint32_t mm_max_avail_block()
     
     return max_avail;
 }
+
+
+#ifdef _DEBUG
+
+static int mem_in_use;
+
+static int check_blocks_in_use(uint8_t* start, uint8_t* end)
+{
+    // iterate chunks in use
+    uint8_t* p = start;
+    while (p < end) {
+        uint32_t size = *(uint32_t*)(p);
+        if (p + size > end)
+            return 5;
+        mem_in_use += size;
+        p += size;
+    }
+
+    if (p != end)
+        return 6;
+    
+    return 0;
+}
+
+int mm_check_integrity()
+{
+    mem_in_use = 0;
+    int mem_free = 0;
+
+    if (freelist.size < 0x800 || freelist.size > 0x100000)
+        return 1;
+
+    chunk_t* curr = freelist.next;
+    if (curr != heap_start) {
+        int r = check_blocks_in_use((uint8_t*)heap_start, (uint8_t*)curr);
+        if (r != 0)
+            return r;
+    }
+
+    while (curr->next) {
+        uint8_t* curr_c = (uint8_t*)curr;
+        uint8_t* next_c = (uint8_t*)curr->next;
+
+        uint32_t s = curr->size;
+        if (s > freelist.size)
+            return 2;
+
+        mem_free += s;
+
+        // chuncks must be in ascending order
+        if (curr_c >= next_c)
+            return 3;
+        // chunck must not extend into next block
+        // and leave a gap of more than 4 bytes
+        if (curr_c + s + 4 >= next_c)
+            return 4;
+        
+        int r = check_blocks_in_use(curr_c + s, next_c);
+        if (r != 0)
+            return r;
+        
+        curr = curr->next;
+    }
+
+    mem_free += curr->size;
+
+    if ((uint8_t*)curr < ((uint8_t*)heap_start) + freelist.size) {
+        int r = check_blocks_in_use((uint8_t*)curr, ((uint8_t*)heap_start) + freelist.size);
+        if (r != 0)
+            return r;
+    }
+
+    return 0; // everyting seems ok
+}
+
+#endif
 
 
 extern char *__brkval;

@@ -158,31 +158,25 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     // enable interrupts
     if (p == 0) {
         NVIC_CLEAR_PENDING(IRQ_PORTA);
-        NVIC_SET_PRIORITY(IRQ_PORTA, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTA);
 
 #if defined(__MKL26Z64__)
         // Teensy LC
         NVIC_CLEAR_PENDING(IRQ_PORTCD);
-        NVIC_SET_PRIORITY(IRQ_PORTCD, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTCD);
 
 #elif defined(__MK20DX256__)
         // Teensy 3.2
         NVIC_CLEAR_PENDING(IRQ_PORTB);
-        NVIC_SET_PRIORITY(IRQ_PORTB, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTB);
 
         NVIC_CLEAR_PENDING(IRQ_PORTC);
-        NVIC_SET_PRIORITY(IRQ_PORTC, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTC);
 
         NVIC_CLEAR_PENDING(IRQ_PORTD);
-        NVIC_SET_PRIORITY(IRQ_PORTD, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTD);
 
         NVIC_CLEAR_PENDING(IRQ_PORTE);
-        NVIC_SET_PRIORITY(IRQ_PORTE, 128);
         NVIC_ENABLE_IRQ(IRQ_PORTE);
 #endif
     }

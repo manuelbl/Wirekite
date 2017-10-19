@@ -133,7 +133,6 @@ void analog_init()
 #endif
 
     NVIC_CLEAR_PENDING(IRQ_ADC0);
-    NVIC_SET_PRIORITY(IRQ_ADC0, 128);
     NVIC_ENABLE_IRQ(IRQ_ADC0);
 
 #if defined(__MK20DX256__)
@@ -146,7 +145,6 @@ void analog_init()
     ADC1_SC2 = ADC_SC2_REFSEL(1); // vcc
 
     NVIC_CLEAR_PENDING(IRQ_ADC1);
-    NVIC_SET_PRIORITY(IRQ_ADC1, 128);
     NVIC_ENABLE_IRQ(IRQ_ADC1);
 
 #endif

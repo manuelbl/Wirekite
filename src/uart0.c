@@ -67,7 +67,6 @@ void uart0_init(int32_t baudrate)
 
     // enable interrupts
     NVIC_CLEAR_PENDING(IRQ_UART0_STATUS);
-    NVIC_SET_PRIORITY(IRQ_UART0_STATUS, 128);
     NVIC_ENABLE_IRQ(IRQ_UART0_STATUS);
 }
 

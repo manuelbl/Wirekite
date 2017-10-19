@@ -44,6 +44,7 @@ extern "C" {
 #define WK_CFG_QUERY_MEM_MAX_BLOCK 2
 #define WK_CFG_QUERY_MEM_MCU 3
 #define WK_CFG_QUERY_VERSION 4
+#define WK_CFG_QUERY_MEM_INTEGRITY 5
 
 #define WK_CFG_MCU_TEENSY_LC 1
 #define WK_CFG_MCU_TEENSY_3_2 2
@@ -53,12 +54,14 @@ extern "C" {
 
 #define WK_RESULT_OK 0
 #define WK_RESULT_INV_DATA 1
+#define WK_RESULT_OUT_OF_MEM 2
 
 #define WK_EVENT_DODO 0
 #define WK_EVENT_SINGLE_SAMPLE 1
 #define WK_EVENT_TX_COMPLETE 2
 #define WK_EVENT_DATA_RECV 3
 #define WK_EVENT_SET_DONE 4
+#define WK_EVENT_ERROR 5
 
 
 typedef struct {

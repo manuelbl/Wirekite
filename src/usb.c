@@ -257,6 +257,7 @@ static uint8_t wcid_extended_properties_feature_desc[] = {
 static const descriptor_entry_t descriptors[] = {
     { 0x0100, 0x0000, device_desc, sizeof(device_desc) },
     { 0x0200, 0x0000, &configuration_desc, sizeof(configuration_desc) },
+    { 0x0201, 0x0000, &configuration_desc, sizeof(configuration_desc) },
     { 0x0300, 0x0000, &language_desc, 4 },
     { 0x0301, 0x0409, &manufacturer_desc, 2 + 21 * 2 },
     { 0x0302, 0x0409, &product_desc, 2 + 8 * 2 },
@@ -543,6 +544,7 @@ static uint8_t* partial_msg;
 static uint16_t partial_msg_size;
 static uint16_t partial_msg_offset;
 static uint8_t* msg_free_addr[2];
+static uint8_t outstanding_tx_packets;
 
 
 static void endp1_handler(uint8_t stat);
@@ -569,22 +571,20 @@ void endp1_handler(uint8_t stat)
             msg_free_addr[bdt_idx] = NULL;
         }
         bdt->addr = NULL;
+        outstanding_tx_packets--;
 
-        while ((BDT(1, TX, endp1_bdt_idx).desc & BDT_OWN) == 0) {
-
-            // if no message has been partially transmitted,
-            // get a new one from the queue
-            if (partial_msg == NULL) {
-                wk_msg_header* msg = (wk_msg_header*) endp1_get_next_buffer();
-                if (msg == NULL)
-                    break; // no more message at the moment
-                partial_msg = (uint8_t*)msg;
-                partial_msg_size = msg->message_size;
-                partial_msg_offset = 0;
-            }
-
-            endp1_submit_packet();
+        // if no message has been partially transmitted,
+        // get a new one from the queue
+        if (partial_msg == NULL) {
+            wk_msg_header* msg = (wk_msg_header*) endp1_get_next_buffer();
+            if (msg == NULL)
+                break; // no more messages at the moment
+            partial_msg = (uint8_t*)msg;
+            partial_msg_size = msg->message_size;
+            partial_msg_offset = 0;
         }
+
+        endp1_submit_packet();
         break;
 
     case PID_OUT: // RX
@@ -602,7 +602,7 @@ void endp1_tx_msg(wk_msg_header* msg) {
     if (dev_state != DEV_STATE_CONFIGURED)
         return; // not in configured state
 
-    if (BDT(1, TX, endp1_bdt_idx).desc & BDT_OWN) {
+    if (outstanding_tx_packets >= 2) {
         // queue message
         endp1_append_buffer(msg);
     } else {
@@ -626,13 +626,14 @@ void endp1_submit_packet()
 
     partial_msg_offset += chunk_size;
     if (partial_msg_offset >= partial_msg_size) {
-        // entire message was submitted for transmission
+        // last piece of message was submitted for transmission
         msg_free_addr[endp1_bdt_idx] = partial_msg;
         partial_msg = NULL;
     }
 
     endp1_data ^= 1;
     endp1_bdt_idx ^= 1;
+    outstanding_tx_packets++;
 }
 
 
@@ -794,7 +795,6 @@ void usb_init(const char* serial_number)
     USB0_INTEN = USB_INTEN_USBRSTEN;
 
 	// enable interrupt in NVIC...
-	NVIC_SET_PRIORITY(IRQ_USBOTG, 128);
 	NVIC_ENABLE_IRQ(IRQ_USBOTG);
 
 	// enable d+ pullup
@@ -836,7 +836,11 @@ void usb_buffer_init(uint8_t configuration)
             msg_free_addr[i] = NULL;
         }
     }
-    partial_msg = NULL;
+    if (partial_msg != NULL) {
+        mm_free(partial_msg);
+        partial_msg = NULL;
+    }
+    outstanding_tx_packets = 0;
 
     endp1_clear_tx_buffer();
     

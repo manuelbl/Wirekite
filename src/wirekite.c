@@ -8,6 +8,7 @@
 #include <string.h>
 #include "kinetis.h"
 
+#include "debug.h"
 #include "wirekite.h"
 #include "analog.h"
 #include "mem.h"
@@ -17,7 +18,6 @@
 #include "proto.h"
 #include "pwm.h"
 #include "usb.h"
-#include "debug.h"
 
 
 uint8_t wk_reset_flag = 0;
@@ -40,7 +40,7 @@ void wk_check_usb_rx()
     // check for global reset
     if (wk_reset_flag != 0) {
         wk_reset_flag = 0;
-        __disable_irq();
+        __disable_irq();        
         wk_reset();
         __enable_irq();
     }
@@ -60,7 +60,10 @@ void wk_check_usb_rx()
             // was transmitted
             msg_size += ((uint16_t)rx_buf[0]) << 8;
             partial_msg = (wk_msg_header*)mm_alloc(msg_size);
-            partial_msg->message_size = msg_size;
+            if (partial_msg != NULL)
+                partial_msg->message_size = msg_size;
+            else
+                DEBUG_OUT("Insufficient memory for request");
             DEBUG_OUT("Super special case");
         }
 
@@ -125,6 +128,8 @@ void wk_check_usb_rx()
             partial_size = rx_size;
             if (partial_msg != NULL)
                 memcpy(partial_msg, rx_buf, rx_size);
+            else
+                DEBUG_OUT("Insufficient memory for request");
         }
     }
 
@@ -183,6 +188,8 @@ void handle_config_request(wk_config_request* request)
             if (port_id != 0) {
                 send_config_response(WK_RESULT_OK, port_id, request->header.request_id, optional1, 0);
                 return;
+            } else {
+                result = WK_RESULT_INV_DATA;
             }
 
         } else if (request->action == WK_CFG_ACTION_RELEASE) {
@@ -216,6 +223,8 @@ void handle_config_request(wk_config_request* request)
             
             } else if (request->port_type == WK_CFG_MODULE_PWM_CHANNEL) {
                 pwm_channel_config(request->pin_config, request->value1, request->port_attributes1);
+            } else {
+                result = WK_RESULT_INV_DATA;
             }
 
         } else if (request->action == WK_CFG_ACTION_QUERY) {
@@ -224,6 +233,10 @@ void handle_config_request(wk_config_request* request)
                 value = mm_avail();
             } else if (request->port_type == WK_CFG_QUERY_MEM_MAX_BLOCK) {
                 value = mm_max_avail_block();
+#ifdef _DEBUG
+            } else if (request->port_type == WK_CFG_QUERY_MEM_INTEGRITY) {
+                value = mm_check_integrity();
+#endif
             } else if (request->port_type == WK_CFG_QUERY_MEM_MCU) {
 #if defined(__MKL26Z64__)
                 value = WK_CFG_MCU_TEENSY_LC;
@@ -236,9 +249,11 @@ void handle_config_request(wk_config_request* request)
                 result = WK_RESULT_INV_DATA;
             }
             
-            send_config_response(result, request->header.port_id, request->header.request_id, 0, value);            
+            send_config_response(result, request->header.port_id, request->header.request_id, 0, value);
+            return;
         
         } else {
+            result = WK_RESULT_INV_DATA;
             DEBUG_OUT("Invalid config msg");
         }
     }    
@@ -307,7 +322,16 @@ void take_ownership_or_copy(wk_port_request** request, uint8_t* deallocate_msg)
     } else {
         // cannot take ownership; make copy
         wk_port_request* request2 = (wk_port_request*)mm_alloc((*request)->header.message_size);
-        memcpy(request2, *request, (*request)->header.message_size);
+        if (request2 != NULL) {
+            memcpy(request2, *request, (*request)->header.message_size);
+        } else {
+            DEBUG_OUT("Insufficient memory to store request");
+            wk_msg_header* hdr = &(*request)->header;
+            if (hdr->message_type == WK_MSG_TYPE_CONFIG_REQUEST)
+                send_config_response(WK_RESULT_OUT_OF_MEM, hdr->port_id, hdr->request_id, 0, 0);
+            else
+                wk_send_port_event(hdr->port_id, WK_EVENT_ERROR, hdr->request_id, WK_RESULT_OUT_OF_MEM);
+        }
         *request = request2;
     }
 }
@@ -316,8 +340,10 @@ void take_ownership_or_copy(wk_port_request** request, uint8_t* deallocate_msg)
 void send_config_response(uint16_t result, uint16_t port_id, uint16_t request_id, uint16_t optional1, uint32_t value1)
 {
     wk_config_response* response = (wk_config_response*) mm_alloc(sizeof(wk_config_response));
-    if (response == NULL)
+    if (response == NULL) {
+        DEBUG_OUT("Insufficient memory for config response");
         return; // drop data
+    }
 
     response->header.message_size = sizeof(wk_config_response);
     response->header.message_type = WK_MSG_TYPE_CONFIG_RESPONSE;
@@ -341,8 +367,10 @@ void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, ui
 {
     uint32_t msg_size = WK_PORT_EVENT_ALLOC_SIZE(data_len);
     wk_port_event* event = (wk_port_event*) mm_alloc(msg_size);
-    if (event == NULL)
+    if (event == NULL) {
+        DEBUG_OUT("Insufficient memory for port event");
         return; // drop data
+    }
 
     event->header.message_size = msg_size;
     event->header.message_type = WK_MSG_TYPE_PORT_EVENT;
