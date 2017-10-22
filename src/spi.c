@@ -131,11 +131,6 @@ static const freq_div_t freq_divs[] = {
 #define STATE_RX 3
 #define STATE_ERROR 4
 
-#define SUB_STATE_IDLE 0
-#define SUB_STATE_DATA 1
-#define SUB_STATE_DMA 2
-#define SUB_STATE_DMA_LAST_BYTE 3
-
 
 #define CIRC_QUEUE_SIZE 20
 
@@ -145,13 +140,12 @@ typedef struct {
         wk_port_request* request;
         wk_port_event* response;
     };
-    uint8_t state;
-    uint8_t sub_state;
     uint16_t processed;
     uint8_t circ_request_head;
     uint8_t circ_request_tail;
     uint8_t dma_tx;
     uint8_t dma_rx;
+    uint8_t state;
     uint8_t sck;
     uint8_t mosi;
     uint8_t miso;
@@ -341,7 +335,6 @@ void master_start_send_2(wk_port_request* request)
     spi_port port = (uint8_t) request->header.port_id;
     spi_port_info_t* pi = &port_info[port];
     pi->state = STATE_TX;
-    pi->sub_state = SUB_STATE_DATA;
     pi->request = request;
     pi->processed = 0;
     
@@ -359,7 +352,6 @@ void master_start_send_2(wk_port_request* request)
         dma_dest_byte(dma_tx, &spi->DL);
         dma_source_byte(dma_rx, &spi->DL);
         dma_dest_byte_buffer(dma_rx, request->data, data_len);
-        pi->sub_state = SUB_STATE_DMA;
         // DMA will start after first byte    
     } else {
         spi->C1 |= SPI_C1_SPIE;
@@ -442,10 +434,10 @@ void spi_port_release(spi_port port)
         return;
     
     pi->state = STATE_INACTIVE;
-    pi->sub_state = SUB_STATE_IDLE;
         
     KINETISL_SPI_t* spi = get_spi_ctrl(port);
     spi->C1 = 0;
+    spi->C2 = 0;
     
     if (pi->dma_tx != DMA_CHANNEL_ERROR)
         dma_release_channel(pi->dma_tx);
@@ -497,7 +489,6 @@ void dma_tx_isr_handler(uint8_t port)
     } else if (dma_is_complete(dma)) {
         // disable TX DMA
         spi->C2 &= ~SPI_C2_TXDMAE;
-        pi->sub_state = SUB_STATE_DMA_LAST_BYTE;
         dma_clear_complete(dma);        
         // no further action; the last byte is still being received
 
@@ -609,7 +600,6 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
     mm_free(request);
     pi->request = NULL;
     pi->state = STATE_WAITING;
-    pi->sub_state = SUB_STATE_IDLE;
     pi->processed = 0;
 
     // send completion message
@@ -694,39 +684,32 @@ void spi_isr_handler(uint8_t port)
 {
     spi_port_info_t* pi = &port_info[port];
     KINETISL_SPI_t* spi = get_spi_ctrl(port);
-    uint8_t sub_state = pi->sub_state;
 
-    if (sub_state == SUB_STATE_DATA) {
+    wk_port_request* request = pi->request;
 
-        wk_port_request* request = pi->request;
-
-        // read received data byte;
-        // must first read status register even though we now
-        // data byte is ready as interrupt was triggered;
-        // replaces: while ((spi->S & SPI_S_SPRF) == 0);
-        uint8_t __attribute__((unused)) dummy = spi->S;
-        int processed = pi->processed;
-        request->data[processed] = spi->DL;
-        processed++;
-        pi->processed = (uint16_t)processed;
+    // read received data byte;
+    // must first read status register even though we now
+    // data byte is ready as interrupt was triggered;
+    // replaces: while ((spi->S & SPI_S_SPRF) == 0);
+    uint8_t __attribute__((unused)) dummy = spi->S;
+    int processed = pi->processed;
+    request->data[processed] = spi->DL;
+    processed++;
+    pi->processed = (uint16_t)processed;
+    
+    int data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
+    if (processed == data_len) {
+        // request is complete
+        spi->C1 &= ~SPI_C1_SPIE;
+        write_complete(port, SPI_STATUS_OK, pi->processed);    
         
-        int data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
-        if (processed == data_len) {
-            // request is complete
-            spi->C1 &= ~SPI_C1_SPIE;
-            write_complete(port, SPI_STATUS_OK, pi->processed);    
-            
-        } else {
-            // transmit next data byte;
-            // must first read status register even though we know register is
-            // ready to receive data as writes are interleaved with reads;
-            // replaces: while ((spi->S & SPI_S_SPTEF) == 0);
-            uint8_t __attribute__((unused)) dummy = spi->S;
-            spi->DL = request->data[processed];
-        }
-
     } else {
-        DEBUG_OUT("Spurious SPI interrupt");
+        // transmit next data byte;
+        // must first read status register even though we know register is
+        // ready to receive data as writes are interleaved with reads;
+        // replaces: while ((spi->S & SPI_S_SPTEF) == 0);
+        uint8_t __attribute__((unused)) dummy = spi->S;
+        spi->DL = request->data[processed];
     }
 }
 
