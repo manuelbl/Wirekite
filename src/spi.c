@@ -699,11 +699,13 @@ void spi_isr_handler(uint8_t port)
     if (sub_state == SUB_STATE_DATA) {
 
         wk_port_request* request = pi->request;
-        int processed = pi->processed;
 
-        // read byte (must read status register but should not
-        // block as interrupt has been triggered)
-        while ((spi->S & SPI_S_SPRF) == 0);
+        // read received data byte;
+        // must first read status register even though we now
+        // data byte is ready as interrupt was triggered;
+        // replaces: while ((spi->S & SPI_S_SPRF) == 0);
+        uint8_t __attribute__((unused)) dummy = spi->S;
+        int processed = pi->processed;
         request->data[processed] = spi->DL;
         processed++;
         pi->processed = (uint16_t)processed;
@@ -715,9 +717,11 @@ void spi_isr_handler(uint8_t port)
             write_complete(port, SPI_STATUS_OK, pi->processed);    
             
         } else {
-            // transmit next byte (must read status register
-            // but should not block we're interleaved with reads)
-            while ((spi->S & SPI_S_SPTEF) == 0);
+            // transmit next data byte;
+            // must first read status register even though we know register is
+            // ready to receive data as writes are interleaved with reads;
+            // replaces: while ((spi->S & SPI_S_SPTEF) == 0);
+            uint8_t __attribute__((unused)) dummy = spi->S;
             spi->DL = request->data[processed];
         }
 
