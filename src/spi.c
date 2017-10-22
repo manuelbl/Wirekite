@@ -131,22 +131,23 @@ static const freq_div_t freq_divs[] = {
 #define STATE_RX 3
 #define STATE_ERROR 4
 
+#define SUB_STATE_IDLE 0
 #define SUB_STATE_DATA 1
 #define SUB_STATE_DMA 2
+#define SUB_STATE_DMA_LAST_BYTE 3
 
 
-#define CIRC_QUEUE_SIZE 12
+#define CIRC_QUEUE_SIZE 20
 
 
 typedef struct {
-    uint8_t state;
-    uint8_t sub_state;
-    uint16_t processed;
     union {
         wk_port_request* request;
         wk_port_event* response;
     };
-    wk_port_request* circ_request_buf[CIRC_QUEUE_SIZE];
+    uint8_t state;
+    uint8_t sub_state;
+    uint16_t processed;
     uint8_t circ_request_head;
     uint8_t circ_request_tail;
     uint8_t dma_tx;
@@ -154,6 +155,7 @@ typedef struct {
     uint8_t sck;
     uint8_t mosi;
     uint8_t miso;
+    wk_port_request* circ_request_buf[CIRC_QUEUE_SIZE];
 } spi_port_info_t;
 
 #define NUM_SPI_PORTS 2
@@ -254,7 +256,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
     // initialize SPI module
     KINETISL_SPI_t* spi = get_spi_ctrl(spi_port);
 
-    uint8_t c1 = SPI_C1_SPIE | SPI_C1_MSTR | SPI_C1_SPE;
+    uint8_t c1 = SPI_C1_MSTR | SPI_C1_SPE;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE2 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
         c1 |= SPI_C1_CPOL;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE1 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
@@ -328,8 +330,7 @@ void spi_master_start_send(wk_port_request* request)
 
 void master_start_send_2(wk_port_request* request)
 {
-    // take ownership of request; release it when the transmission is done
-    spi_port port = (uint8_t) request->header.port_id;
+    // takes ownership of request; release it when the transmission is done
 
     // chip select
     digital_pin cs = request->action_attribute2;
@@ -337,20 +338,21 @@ void master_start_send_2(wk_port_request* request)
         digital_pin_set_output(cs, 0);
     
     // initialize state
+    spi_port port = (uint8_t) request->header.port_id;
     spi_port_info_t* pi = &port_info[port];
     pi->state = STATE_TX;
     pi->sub_state = SUB_STATE_DATA;
     pi->request = request;
     pi->processed = 0;
-
-    KINETISL_SPI_t* spi = get_spi_ctrl(port);
-
+    
     // setup DMA
+    KINETISL_SPI_t* spi = get_spi_ctrl(port);
     uint8_t dma_tx = pi->dma_tx;
     uint8_t dma_rx = pi->dma_rx;
     
     uint16_t data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
     uint8_t use_dma = dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
+
     if (use_dma) {
         // switch to DMA for bulk of data
         dma_source_byte_buffer(dma_tx, request->data + 1, data_len - 1);
@@ -359,17 +361,18 @@ void master_start_send_2(wk_port_request* request)
         dma_dest_byte_buffer(dma_rx, request->data, data_len);
         pi->sub_state = SUB_STATE_DMA;
         // DMA will start after first byte    
+    } else {
+        spi->C1 |= SPI_C1_SPIE;
     }
 
-    while ((spi->S & SPI_S_SPTEF) == 0);
-
     // transmit first byte
+    while ((spi->S & SPI_S_SPTEF) == 0);
     spi->DL = request->data[0];
 
     if (use_dma) {
+        spi->C2 |= SPI_C2_TXDMAE | SPI_C2_RXDMAE;
         dma_enable(dma_rx);
         dma_enable(dma_tx);
-        spi->C2 |= SPI_C2_TXDMAE | SPI_C2_RXDMAE;
     }
 }
 
@@ -439,7 +442,8 @@ void spi_port_release(spi_port port)
         return;
     
     pi->state = STATE_INACTIVE;
-
+    pi->sub_state = SUB_STATE_IDLE;
+        
     KINETISL_SPI_t* spi = get_spi_ctrl(port);
     spi->C1 = 0;
     
@@ -475,7 +479,7 @@ void dma_tx_isr_handler(uint8_t port)
         uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) + 1;
         dma_clear_error(dma);
 
-        // disable RX DMA
+        // disable RX DMAs
         uint8_t dma_rx = pi->dma_rx;
         if (dma_rx != DMA_CHANNEL_ERROR) {
             dma_disable(dma_rx);
@@ -493,6 +497,7 @@ void dma_tx_isr_handler(uint8_t port)
     } else if (dma_is_complete(dma)) {
         // disable TX DMA
         spi->C2 &= ~SPI_C2_TXDMAE;
+        pi->sub_state = SUB_STATE_DMA_LAST_BYTE;
         dma_clear_complete(dma);        
         // no further action; the last byte is still being received
 
@@ -547,7 +552,7 @@ void dma_rx_isr_handler(uint8_t port)
         return; // oops
     }
 
-    // disable RX DMA
+    // disable DMA
     spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
     dma_disable(dma);
     dma_clear_interrupt(dma);
@@ -604,6 +609,8 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
     mm_free(request);
     pi->request = NULL;
     pi->state = STATE_WAITING;
+    pi->sub_state = SUB_STATE_IDLE;
+    pi->processed = 0;
 
     // send completion message
     wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
@@ -680,38 +687,43 @@ void clear_request_queue(spi_port port)
 
 
 // SPI interrupt
+// Triggered when a new byte has been received
+// (real or dummy)
 
 void spi_isr_handler(uint8_t port)
 {
     spi_port_info_t* pi = &port_info[port];
     KINETISL_SPI_t* spi = get_spi_ctrl(port);
-    uint8_t status = spi->S;
     uint8_t sub_state = pi->sub_state;
-    uint8_t completion_status = 0xff;
 
     if (sub_state == SUB_STATE_DATA) {
 
         wk_port_request* request = pi->request;
-        if ((status & SPI_S_SPRF) != 0) {
-            request->data[pi->processed] = spi->DL;
-            pi->processed++;
-        }
+        int processed = pi->processed;
 
-        // transmission complete
-        if (pi->processed == WK_PORT_REQUEST_DATA_LEN(pi->request)) {
-            completion_status = SPI_STATUS_OK;
+        // read byte (must read status register but should not
+        // block as interrupt has been triggered)
+        while ((spi->S & SPI_S_SPRF) == 0);
+        request->data[processed] = spi->DL;
+        processed++;
+        pi->processed = (uint16_t)processed;
+        
+        int data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
+        if (processed == data_len) {
+            // request is complete
+            spi->C1 &= ~SPI_C1_SPIE;
+            write_complete(port, SPI_STATUS_OK, pi->processed);    
+            
         } else {
-            while ((spi->S & SPI_S_SPTEF) == 0)
-                ;
-            spi->DL = request->data[pi->processed];
+            // transmit next byte (must read status register
+            // but should not block we're interleaved with reads)
+            while ((spi->S & SPI_S_SPTEF) == 0);
+            spi->DL = request->data[processed];
         }
 
     } else {
         DEBUG_OUT("Spurious SPI interrupt");
     }
-    
-    if (completion_status != 0xff)
-        write_complete(port, completion_status, pi->processed);    
 }
 
 
