@@ -432,9 +432,9 @@ void spi_port_release(spi_port port)
     spi_port_info_t* pi = &port_info[port];
     if (pi->state == STATE_INACTIVE)
         return;
-    
+
     pi->state = STATE_INACTIVE;
-        
+
     KINETISL_SPI_t* spi = get_spi_ctrl(port);
     spi->C1 = 0;
     spi->C2 = 0;
@@ -444,6 +444,17 @@ void spi_port_release(spi_port port)
     if (pi->dma_rx != DMA_CHANNEL_ERROR)
         dma_release_channel(pi->dma_rx);
 
+    NVIC_CLEAR_PENDING(port == 0 ? IRQ_SPI0 : IRQ_SPI1);
+
+    wk_port_request* request = pi->request;
+    if (request != NULL) {
+        digital_pin cs = request->action_attribute2;
+        if (cs != DIGI_PIN_ERROR)
+            digital_pin_set_output(cs, 1);
+        mm_free(request);
+        pi->request = NULL;
+    }
+    
     PCR(SCK_map[pi->sck].port, SCK_map[pi->sck].pin) = 0;
     PCR(MOSI_map[pi->mosi].port, MOSI_map[pi->mosi].pin) = 0;
     if (pi->miso != 0xff)
