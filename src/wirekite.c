@@ -399,6 +399,7 @@ void wk_reset()
     pwm_reset();
     i2c_reset();
     spi_reset();
+    endp1_clear_tx_buffer();
 }
 
 

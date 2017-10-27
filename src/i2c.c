@@ -299,6 +299,11 @@ void i2c_master_start_send(wk_port_request* request)
     // take ownership of request; release it when the transmission is done
     i2c_port port = request->header.port_id;
 
+    if (port >= NUM_I2C_PORTS) {
+        mm_free(request);
+        return;
+    }
+
     // if I2C port busy then queue request
     if (port_info[port].state != STATE_WAITING) {
         uint8_t success = append_request(port, request);
@@ -360,7 +365,11 @@ void master_start_send_2(wk_port_request* request)
 void i2c_master_start_recv(wk_port_request* request)
 {
     i2c_port port = request->header.port_id;
+
     
+    if (port >= NUM_I2C_PORTS)
+        return;
+
     // if port is busy copy the request and queue it
     if (port_info[port].state != STATE_WAITING) {
 

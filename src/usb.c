@@ -550,7 +550,6 @@ static uint8_t outstanding_tx_packets;
 static void endp1_handler(uint8_t stat);
 static wk_msg_header* endp1_get_next_buffer();
 static void endp1_append_buffer(wk_msg_header* buf);
-static void endp1_clear_tx_buffer();
 static void endp1_submit_packet();
 
 

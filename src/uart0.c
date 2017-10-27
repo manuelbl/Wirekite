@@ -17,6 +17,9 @@
 #define C2_TX_COMPLETING	C2_ENABLE | UART_C2_TCIE
 #define C2_TX_IIDLE 		C2_ENABLE
 
+#ifdef _DEBUG
+
+
 static volatile uint8_t rx_buffer[RX_BUFFER_SIZE];
 static volatile uint16_t rx_buffer_head = 0;
 static volatile uint16_t rx_buffer_tail = 0;
@@ -207,3 +210,5 @@ void uart0_status_isr(void)
         UART0_C2 = C2_TX_IIDLE;
     }
 }
+
+#endif

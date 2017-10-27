@@ -234,6 +234,9 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
 
 void digital_pin_release(digital_pin pin)
 {
+    if (pin >= num_init_pins)
+        return;
+
     pin_map_t map = pins[pin].map;
     pins[pin].is_used = 0;
 
@@ -253,6 +256,9 @@ void digital_pin_release(digital_pin pin)
 
 void digital_pin_set_output(digital_pin pin, uint8_t value)
 {
+    if (pin >= num_init_pins)
+        return;
+        
     pin_map_t map = pins[pin].map;
 
     // set value
@@ -266,6 +272,9 @@ void digital_pin_set_output(digital_pin pin, uint8_t value)
 
 uint8_t digital_pin_get_input(digital_pin pin)
 {
+    if (pin >= num_init_pins)
+        return 0;
+    
     pin_map_t map = pins[pin].map;
     
     // get value

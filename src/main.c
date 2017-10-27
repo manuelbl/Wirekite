@@ -24,15 +24,15 @@ void check_usb();
 
 extern int main(void)
 {
-    mm_init(NULL, 0);
-    pwm_init();
-    analog_init();
-    i2c_init();
-
 #ifdef _DEBUG
     uart0_init(115200);
     DEBUG_OUT("START");
 #endif
+
+    mm_init(NULL, 0);
+    pwm_init();
+    analog_init();
+    i2c_init();
 
     // create serial number
     char serial_number[20];

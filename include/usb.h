@@ -21,6 +21,7 @@ extern "C" {
 void usb_init(const char* serial_number);
 
 void endp1_tx_msg(wk_msg_header* msg);
+void endp1_clear_tx_buffer();
 
 volatile uint8_t* endp2_get_rx_buffer();
 int16_t endp2_get_rx_size();

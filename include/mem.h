@@ -29,6 +29,7 @@ uint32_t mm_max_avail_block();
 #ifdef _DEBUG
 // Check integrity of memory management (0 is success)
 int mm_check_integrity();
+void mm_dump_used();
 #endif
 
 #ifdef __cplusplus

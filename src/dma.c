@@ -55,6 +55,7 @@ uint8_t dma_acquire_channel()
 
 void dma_release_channel(uint8_t channel)
 {
+    dma_detach_interrupt(channel);
     dma_cfg(channel)->DSR_BCR = DMA_DSR_BCR_DONE;
     dma_cfg(channel)->DCR = DMA_DCR_CS;
     dma_cfg(channel)->SAR = NULL;
@@ -261,6 +262,7 @@ uint8_t dma_acquire_channel()
 
 void dma_release_channel(uint8_t channel)
 {
+    dma_detach_interrupt(channel);
     DMA_CERQ = channel;
     memset(dma_tcd(channel), 0, sizeof(DMA_TCD_t));
 

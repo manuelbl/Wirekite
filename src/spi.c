@@ -126,7 +126,7 @@ static const freq_div_t freq_divs[] = {
 
 
 #define STATE_INACTIVE 0
-#define STATE_WAITING  1
+#define STATE_IDLE  1
 #define STATE_TX 2
 #define STATE_RX 3
 #define STATE_ERROR 4
@@ -235,7 +235,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
         return SPI_PORT_ERROR;
     
     // initialize state
-    pi->state = STATE_WAITING;
+    pi->state = STATE_IDLE;
     pi->sck = sck_port;
     pi->mosi = mosi_port;
     pi->miso = miso_port;
@@ -312,13 +312,15 @@ void spi_master_start_send(wk_port_request* request)
     // take ownership of request; release it when the transmission is done
     spi_port port = (uint8_t) request->header.port_id;
 
-    // if SPI port busy then queue request
-    if (port_info[port].state != STATE_WAITING) {
+    if (port_info[port].state == STATE_INACTIVE) {
+        // not configured
+        mm_free(request);
+    } else if (port_info[port].state != STATE_IDLE) {
+        // if SPI port busy then queue request
         append_request(port, request);
-        return;
+    } else {
+        master_start_send_2(request);
     }
-
-    master_start_send_2(request);
 }
 
 
@@ -374,19 +376,20 @@ void spi_set_digital_output(wk_port_request* request)
     // take ownership of request; release it when the transmission is done
     spi_port port = (uint8_t) request->action_attribute2;
 
-    // if SPI port busy then queue request
-    if (port_info[port].state != STATE_WAITING) {
+    if (port_info[port].state == STATE_INACTIVE) {
+        // not configured
+        mm_free(request);
+    } else if (port_info[port].state != STATE_IDLE) {
+        // if SPI port busy then queue request
         append_request(port, request);
-        return;
+    } else {
+        set_digital_output_2(request);
     }
-
-    set_digital_output_2(request);
 }
 
 
 void set_digital_output_2(wk_port_request* request)
 {
-    spi_port port = (uint8_t) request->action_attribute2;
     digital_pin pin = request->header.port_id & PORT_GROUP_DETAIL_MASK;
     digital_pin_set_output(pin, (uint8_t)request->value1);
 
@@ -397,8 +400,6 @@ void set_digital_output_2(wk_port_request* request)
 
     // send completion message
     wk_send_port_event_2(port_id, WK_EVENT_SET_DONE, request_id, 0, 0, 0, NULL, 0);
-
-    check_queue(port);
 }
 
 
@@ -610,7 +611,7 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
     // free request
     mm_free(request);
     pi->request = NULL;
-    pi->state = STATE_WAITING;
+    pi->state = STATE_IDLE;
     pi->processed = 0;
 
     // send completion message
@@ -623,22 +624,20 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
 // check for pending request in queue
 void check_queue(spi_port port)
 {
-    wk_port_request* request = get_next_request(port);
+    while (1) {
+        wk_port_request* request = get_next_request(port);
+        if (request == NULL)
+            return;
 
-    if (request == NULL)
-        return;
-
-    if (request->action == WK_PORT_ACTION_TX_DATA) {
-        master_start_send_2(request);
-    } else if (request->action == WK_PORT_ACTION_SET_VALUE) {
-        set_digital_output_2(request);
-    } else {
-        DEBUG_OUT("Invalid request in SPI queue");
+        if (request->action == WK_PORT_ACTION_TX_DATA) {
+            master_start_send_2(request);
+            return;
+        } else if (request->action == WK_PORT_ACTION_SET_VALUE) {
+            set_digital_output_2(request);
+        } else {
+            DEBUG_OUT("Invalid request in SPI queue");
+        }
     }
-//    } else if (request->action == WK_PORT_ACTION_RX_DATA) {
-//        master_start_recv_2(request);
-//        mm_free(request);
-//    }
 }
 
 

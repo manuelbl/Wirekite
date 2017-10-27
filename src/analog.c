@@ -184,6 +184,9 @@ void analog_pin_release(analog_pin pin)
 
 void analog_request_conversion(analog_pin pin)
 {
+    if (pin >= NUM_PINS)
+        return; // invalid pin
+        
     if (running_conversion == ANALOG_PIN_NONE) {
         // no conversion on-going; start immediately
         running_conversion = pin;

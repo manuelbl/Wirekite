@@ -242,6 +242,42 @@ int mm_check_integrity()
     return 0; // everyting seems ok
 }
 
+void dump_used_blocks(uint8_t* start, uint8_t* end)
+{
+    while (start < end) {
+        uint32_t size = *(uint32_t*)start;
+        char msg[] = "U .... .. .... ....";
+        bytes_to_hex(msg + 2, start + 4, 2);
+        bytes_to_hex(msg + 7, start + 6, 1);
+        bytes_to_hex(msg + 10, start + 8, 2);
+        bytes_to_hex(msg + 15, start + 10, 2);
+        DEBUG_OUT(msg);
+        start += size;
+    }
+}
+
+void dump_free_block(chunk_t* chunk)
+{
+    char msg[] = "F ....";
+    bytes_to_hex(msg + 2, (uint8_t*)&chunk->size, 2);
+    DEBUG_OUT(msg);
+}
+
+void mm_dump_used()
+{
+    chunk_t* curr = freelist.next;
+    dump_used_blocks((uint8_t*)heap_start, (uint8_t*)curr);
+
+    while (curr->next) {
+        dump_free_block(curr);
+        dump_used_blocks(((uint8_t*)curr) + curr->size, (uint8_t*)curr->next);        
+        curr = curr->next;
+    }
+
+    dump_free_block(curr);
+    dump_used_blocks(((uint8_t*)curr) + curr->size, ((uint8_t*)heap_start) + freelist.size);
+}
+
 #endif
 
 

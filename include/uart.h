@@ -14,6 +14,9 @@
 extern "C" {
 #endif
 
+#ifdef _DEBUG
+
+
 typedef void (*uart_event_func_t)(void);
 
 void uart0_init(int32_t baudrate);
@@ -24,6 +27,8 @@ void uart0_flush();
 int32_t uart0_avail();
 int32_t uart0_read(char* ptr, int32_t len);
 
+
+#endif
 
 #ifdef __cplusplus
 }
