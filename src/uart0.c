@@ -79,7 +79,6 @@ void uart0_end()
     if (!(SIM_SCGC4 & SIM_SCGC4_UART0))
         return;
 
-    NVIC_CLEAR_PENDING(IRQ_UART0_STATUS);
     NVIC_DISABLE_IRQ(IRQ_UART0_STATUS);
     UART0_C2 = 0;
 

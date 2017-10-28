@@ -295,7 +295,7 @@ void analog_reset()
     ADC0_SC3 = ADC_SC3_CALF; // cancel calibration
 
 #if defined(__MK20DX256__)
-    NVIC_CLEAR_PENDING(IRQ_ADC0);
+    NVIC_CLEAR_PENDING(IRQ_ADC1);
     ADC1_SC1A = ADC_SC1_ADCH(0b11111); // cancel conversion
     ADC1_SC3 = ADC_SC3_CALF; // cancel calibration
 #endif

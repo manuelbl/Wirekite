@@ -39,7 +39,7 @@ OBJ_FILES += $(addprefix $(OBJDIR)/,$(notdir $(C_FILES:.c=.o)))
 OBJ_FILES += $(addprefix $(OBJDIR)/,$(notdir $(AS_FILES:.s=.o)))
 
 #  Compiler options for C and C++
-CPPFLAGS = -Wall -mthumb -Os -MMD -D__$(MCU)__ -DF_CPU=$(F_CPU) $(INCDIRS) -mcpu=$(CPU) -fsingle-precision-constant -fno-common
+CPPFLAGS = -Wall -mthumb -Os -MMD -D__$(MCU)__ -DF_CPU=$(F_CPU) $(INCDIRS) -mcpu=$(CPU) -fsingle-precision-constant -fno-common -D_DEBUG
 
 #  Compiler options for C++ only
 CXXFLAGS = -std=gnu++0x -felide-constructors -fno-exceptions -fno-rtti -ffunction-sections -fdata-sections -fno-common

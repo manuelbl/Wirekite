@@ -794,8 +794,9 @@ void usb_init(const char* serial_number)
     USB0_INTEN = USB_INTEN_USBRSTEN;
 
 	// enable interrupt in NVIC...
+	NVIC_CLEAR_PENDING(IRQ_USBOTG);
 	NVIC_ENABLE_IRQ(IRQ_USBOTG);
-
+    
 	// enable d+ pullup
 	USB0_CONTROL = USB_CONTROL_DPPULLUPNONOTG;
 }

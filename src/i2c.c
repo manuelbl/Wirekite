@@ -149,17 +149,17 @@ static const freq_div_t freq_divs[] = {
 
 
 #define STATE_INACTIVE 0
-#define STATE_WAITING  1
+#define STATE_IDLE  1
 #define STATE_TX 2
 #define STATE_RX 3
-#define STATE_ERROR 4
 
-#define SUB_STATE_ADDR 0
-#define SUB_STATE_DATA 1
-#define SUB_STATE_DMA 2
+#define SUB_STATE_NONE 0
+#define SUB_STATE_ADDR 1
+#define SUB_STATE_DATA 2
+#define SUB_STATE_DMA 3
 
 
-#define CIRC_QUEUE_SIZE 12
+#define CIRC_QUEUE_SIZE 20
 
 
 typedef struct {
@@ -182,14 +182,14 @@ typedef struct {
 static port_info_t port_info[NUM_I2C_PORTS];
 
 
-static void master_start_send_2(wk_port_request* request);
-static void master_start_recv_2(wk_port_request* request);
+static void master_start_tx_now(wk_port_request* request);
+static void master_start_rx_now(wk_port_request* request);
 static KINETIS_I2C_t* get_i2c_ctrl(i2c_port port);
 static void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency);
 static uint8_t acquire_bus(i2c_port port);
 static wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size);
-static void switch_to_recv(i2c_port port);
-static void master_start_recv_3(i2c_port port, uint16_t slave_addr);
+static void switch_to_rx(i2c_port port);
+static void master_start_rx_3(i2c_port port, uint16_t slave_addr);
 static void dma_i2c0_isr();
 static void dma_i2c1_isr();
 static void dma_isr_handler(uint8_t port);
@@ -208,10 +208,7 @@ void i2c_init()
 void i2c_reset()
 {
     for (int i = 0; i < NUM_I2C_PORTS; i++)
-        if (port_info[i].state != STATE_INACTIVE)
-            i2c_port_release(i);
-
-    SIM_SCGC4 &= ~(SIM_SCGC4_I2C0 | SIM_SCGC4_I2C1);
+        i2c_port_release(i);
 }
 
 i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
@@ -224,14 +221,10 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
     if (pi->state != STATE_INACTIVE)
         return I2C_PORT_ERROR;
 
-    pi->state = STATE_WAITING;
+    pi->state = STATE_IDLE;
     pi->pins = pins;
 
-    if (port == 0) {
-        SIM_SCGC4 |= SIM_SCGC4_I2C0;
-    } else if (port == 1) {
-        SIM_SCGC4 |= SIM_SCGC4_I2C1;
-    }
+    SIM_SCGC4 |= port == 0 ? SIM_SCGC4_I2C0 : SIM_SCGC4_I2C1;
 
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
 
@@ -240,18 +233,19 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
     i2c->A1 = 0;
     i2c->RA = 0;
 
-    // configure SCL
-    PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = PORT_PCR_MUX(port_map[pins].scl_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
-
-    // configure SDA
-    PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = PORT_PCR_MUX(port_map[pins].sda_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
-
     set_frequency(i2c, port == 0 ? F_BUS : F_CPU, frequency);
     
     i2c->C1 = I2C_C1_IICEN;
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
+    NVIC_CLEAR_PENDING(port == 0 ? IRQ_I2C0 : IRQ_I2C1);
     NVIC_ENABLE_IRQ(port == 0 ? IRQ_I2C0 : IRQ_I2C1);
+    
+    // configure SCL pin
+    PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = PORT_PCR_MUX(port_map[pins].scl_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
+    
+    // configure SDA pin
+    PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = PORT_PCR_MUX(port_map[pins].sda_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
 
     // configure DMA
     uint8_t dma = dma_acquire_channel();
@@ -276,49 +270,54 @@ void i2c_port_release(i2c_port port)
         return;
     
     pi->state = STATE_INACTIVE;
+    pi->sub_state = SUB_STATE_NONE;
+    
+    NVIC_DISABLE_IRQ(port == 0 ? IRQ_I2C0 : IRQ_I2C1);
     
     if (pi->dma != DMA_CHANNEL_ERROR)
         dma_release_channel(pi->dma);
-
+    
     uint8_t pins = pi->pins;
     PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = 0;
     PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = 0;
 
+    KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
+    i2c->C1 = 0;
+    i2c->FLT = I2C_FLT_STOPF | I2C_FLT_STARTF;
+    i2c->S = I2C_S_IICIF | I2C_S_ARBL;
+
+    mm_free(pi->request);
+    pi->request = NULL;
+
+    SIM_SCGC4 &= port == 0 ? ~SIM_SCGC4_I2C0 : ~SIM_SCGC4_I2C1;
+    
     clear_request_queue(port);
 }
 
-
-void i2c_port_reset(i2c_port port)
+// Takes owernship of request
+void i2c_master_start_tx(wk_port_request* request)
 {
-    // TODO
-}
-
-
-void i2c_master_start_send(wk_port_request* request)
-{
-    // take ownership of request; release it when the transmission is done
     i2c_port port = request->header.port_id;
-
     if (port >= NUM_I2C_PORTS) {
         mm_free(request);
         return;
     }
 
-    // if I2C port busy then queue request
-    if (port_info[port].state != STATE_WAITING) {
+    if (port_info[port].state != STATE_IDLE) {
+        // if I2C port busy then queue request
         uint8_t success = append_request(port, request);
         if (!success)
             mm_free(request);
-        return;
+    } else {
+        // start request immediately
+        master_start_tx_now(request);
     }
-
-    master_start_send_2(request);
 }
 
 
-void master_start_send_2(wk_port_request* request)
+// Takes owernship of request
+void master_start_tx_now(wk_port_request* request)
 {
-    // take ownership of request; release it when the transmission is done
     i2c_port port = request->header.port_id;
 
     // reset flags
@@ -327,19 +326,19 @@ void master_start_send_2(wk_port_request* request)
     i2c->FLT &= ~I2C_FLT_SSIE;
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
-    // acquire bus
-    uint8_t status = acquire_bus(port);
-    if (status != I2C_STATUS_OK) {
-        write_complete(port, status, 0);
-        return;
-    }
-
     // initialize state
     port_info_t* pi = &port_info[port];
     pi->state = STATE_TX;
     pi->sub_state = SUB_STATE_ADDR;
     pi->request = request;
     pi->processed = 0;
+
+    // acquire bus
+    uint8_t status = acquire_bus(port);
+    if (status != I2C_STATUS_OK) {
+        write_complete(port, status, 0);
+        return;
+    }
 
     // setup DMA
     uint8_t dma = pi->dma;
@@ -362,34 +361,36 @@ void master_start_send_2(wk_port_request* request)
 }
 
 
-void i2c_master_start_recv(wk_port_request* request)
+// Does NOT take ownership of request
+void i2c_master_start_rx(wk_port_request* request)
 {
-    i2c_port port = request->header.port_id;
-
-    
+    i2c_port port = request->header.port_id;    
     if (port >= NUM_I2C_PORTS)
         return;
 
     // if port is busy copy the request and queue it
-    if (port_info[port].state != STATE_WAITING) {
+    if (port_info[port].state != STATE_IDLE) {
 
         wk_port_request* copy = mm_alloc(request->header.message_size);
-        if (copy == NULL)
+        if (copy == NULL) {
+            DEBUG_OUT("I2C insufficient memory");
             return;
+        }
         
         memcpy(copy, request, request->header.message_size);
 
         uint8_t success = append_request(port, copy);
         if (!success)
             mm_free(copy);
-        return;
-    }
 
-    master_start_recv_2(request);
+    } else {
+        master_start_rx_now(request);
+    }
 }
 
 
-void master_start_recv_2(wk_port_request* request)
+// Does NOT take ownership of request
+void master_start_rx_now(wk_port_request* request)
 {
     i2c_port port = request->header.port_id;
     
@@ -406,12 +407,12 @@ void master_start_recv_2(wk_port_request* request)
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
 
     // start receive
-    master_start_recv_3(port, request->action_attribute2);
+    master_start_rx_3(port, request->action_attribute2);
 }
 
 
 // Switch from transmitting to receiving
-void switch_to_recv(i2c_port port)
+void switch_to_rx(i2c_port port)
 {
     port_info_t* pi = &port_info[port];
     wk_port_request* request = pi->request;
@@ -424,17 +425,18 @@ void switch_to_recv(i2c_port port)
 
     // free request with transmit data
     mm_free(request);
+    pi->state = STATE_IDLE;
 
     // allocate response with RX buffer
     pi->response = create_response(port_id, request_id, rx_size);
     if (pi->response == NULL)
         return;
     
-    master_start_recv_3(port, slave_addr);
+    master_start_rx_3(port, slave_addr);
 }
 
 
-void master_start_recv_3(i2c_port port, uint16_t slave_addr)
+void master_start_rx_3(i2c_port port, uint16_t slave_addr)
 {
     // initialize state
     port_info_t* pi = &port_info[port];
@@ -466,27 +468,31 @@ void master_start_recv_3(i2c_port port, uint16_t slave_addr)
 // check for pending request in queue
 void check_queue(i2c_port port)
 {
-    wk_port_request* request = get_next_request(port);
+    port_info_t* pi = &port_info[port];
+    while (pi->state == STATE_IDLE) {
+        wk_port_request* request = get_next_request(port);
+        if (request == NULL)
+            return;
 
-    if (request == NULL)
-        return;
-
-    if (request->action == WK_PORT_ACTION_RX_DATA) {
-        master_start_recv_2(request);
-        mm_free(request);
-    } else {
-        master_start_send_2(request);
+        if (request->action == WK_PORT_ACTION_RX_DATA) {
+            master_start_rx_now(request);
+            mm_free(request);
+        } else {
+            master_start_tx_now(request);
+        }
     }
 }
 
-
+// Caller must take owernship of returned object
 wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size)
 {
     // allocate response message and copy data
     uint16_t msg_size = WK_PORT_EVENT_ALLOC_SIZE(rx_size);
     wk_port_event* response = mm_alloc(msg_size);
     if (response == NULL) {
+        DEBUG_OUT("I2C RX insufficient mem");
         wk_send_port_event_2(port_id, WK_EVENT_DATA_RECV, request_id, I2C_STATUS_OUT_OF_MEMORY, 0, 0, NULL, 0);
+        check_queue((i2c_port)port_id);
         return NULL;
     }
         
@@ -507,20 +513,17 @@ void i2c_isr_handler(uint8_t port)
     uint8_t sub_state = pi->sub_state;
     uint8_t completion_status = 0xff;
     
+    i2c->S = I2C_S_IICIF | I2C_S_ARBL; // clear interrupt flag
+    
     // master to slave transmission
     if (pi->state == STATE_TX) {
 
         // arbitration lost
         if (status & I2C_S_ARBL) {
-            pi->state = STATE_ERROR;
-            i2c->S = I2C_S_ARBL; // clear flag
-            i2c->C1 = I2C_C1_IICEN; // reset to RX
             completion_status = I2C_STATUS_ARB_LOST;
 
         // no ACK received
         } else if (status & I2C_S_RXAK) {
-            pi->state = STATE_ERROR;
-            i2c->C1 = I2C_C1_IICEN; // reset to RX
             completion_status = I2C_STATUS_DATA_NAK;
             if (sub_state == SUB_STATE_ADDR || (sub_state == SUB_STATE_DMA && pi->processed == 0))
                 completion_status = I2C_STATUS_ADDR_NAK;
@@ -530,7 +533,6 @@ void i2c_isr_handler(uint8_t port)
 
             // address transmitted
             if (sub_state == SUB_STATE_ADDR) {
-
                 pi->sub_state = SUB_STATE_DATA;
                 i2c->D = pi->request->data[0];
                 
@@ -538,13 +540,11 @@ void i2c_isr_handler(uint8_t port)
             } else if (pi->processed == WK_PORT_REQUEST_DATA_LEN(pi->request) - 1) {
                 pi->processed++;
                 if (pi->request->action == WK_PORT_ACTION_TX_DATA) {
-                    i2c->C1 = I2C_C1_IICEN; // reset to RX
                     completion_status = I2C_STATUS_OK;
                 } else {
                     // continue receiving data
                     i2c->S = I2C_S_IICIF; // clear interrupt flag
-                    switch_to_recv(port);
-                    return;
+                    switch_to_rx(port);
                 }
 
             // transmit next byte
@@ -552,13 +552,12 @@ void i2c_isr_handler(uint8_t port)
                 pi->processed++;
                 i2c->D = pi->request->data[pi->processed];
             }
-        
         }
 
-        i2c->S = I2C_S_IICIF; // clear interrupt flag
-
-        if (completion_status != 0xff)
+        if (completion_status != 0xff) {
+            i2c->C1 = I2C_C1_IICEN; // reset to RX
             write_complete(port, completion_status, pi->processed);    
+        }
 
     // master to slave receive
     } else if (pi->state == STATE_RX) {
@@ -570,15 +569,10 @@ void i2c_isr_handler(uint8_t port)
 
             // arbitration lost
             if (status & I2C_S_ARBL) {
-                pi->state = STATE_ERROR;
-                i2c->S = I2C_S_ARBL; // clear flag
-                i2c->C1 = I2C_C1_IICEN; // reset to RX
                 completion_status = I2C_STATUS_ARB_LOST;
 
             // no ACK received
             } else if (status & I2C_S_RXAK) {
-                pi->state = STATE_ERROR;
-                i2c->C1 = I2C_C1_IICEN; // reset to RX
                 completion_status = sub_state == I2C_STATUS_ADDR_NAK;
 
             // slave address transmitted
@@ -616,7 +610,6 @@ void i2c_isr_handler(uint8_t port)
                 for (int i = 0; i < 20; i++) { // TODO
                     __asm__ volatile ("nop");
                 }
-                i2c->C1 = I2C_C1_IICEN;
                 completion_status = I2C_STATUS_OK;
                 
             // receive next byte
@@ -625,13 +618,12 @@ void i2c_isr_handler(uint8_t port)
             }
         }
 
-        i2c->S = I2C_S_IICIF; // clear interrupt flag
-        
-        if (completion_status != 0xff)
-            read_complete(port, completion_status, pi->processed);    
+        if (completion_status != 0xff) {
+            i2c->C1 = I2C_C1_IICEN; // reset to RX
+            read_complete(port, completion_status, pi->processed);
+        }
     
     } else {
-        i2c->S = I2C_S_IICIF; // clear interrupt flag
         DEBUG_OUT("Spurious I2C interrupt");
     }
 }
@@ -647,7 +639,6 @@ uint8_t acquire_bus(i2c_port port)
     } else {
         if (i2c->S & I2C_S_BUSY) {
             // bus is busy; return error
-            port_info[port].state = STATE_WAITING;
             return I2C_STATUS_BUS_BUSY;
         }
 
@@ -656,7 +647,6 @@ uint8_t acquire_bus(i2c_port port)
 
         // verify success
         if (!(i2c->C1 & I2C_C1_MST)) {
-            port_info[port].state = STATE_WAITING;
             return I2C_STATUS_BUS_BUSY;
         }
     }
@@ -715,7 +705,7 @@ void dma_isr_handler(uint8_t port)
         // DMA has written last byte to data register; I2C starts to send last byte
         if (dma_is_complete(dma)) {            
             dma_clear_interrupt(dma);
-            dma_clear_complete(dma); // revisit for Teensy 3.2
+            dma_clear_complete(dma);
             pi->sub_state = SUB_STATE_DATA;
             pi->processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - 1;
             // disable DMA
@@ -723,35 +713,38 @@ void dma_isr_handler(uint8_t port)
             i2c->S = I2C_S_IICIF; // clear flags
             
         } else {
-            uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma);
-            dma_clear_interrupt(dma);
-            dma_clear_error(dma);
-
             uint8_t status = (i2c->S & I2C_S_ARBL) ? I2C_STATUS_ARB_LOST : I2C_STATUS_UNKNOWN;
             i2c->S = I2C_S_ARBL | I2C_S_IICIF; // clear flags
             i2c->C1 = I2C_C1_IICEN; // disable, set to RX
+
+            dma_clear_interrupt(dma);
+            dma_clear_error(dma);
+
+            uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma);
             write_complete(port, status, processed);
         }
 
     } else {
 
-        // DMA has read second to last byte to data register; I2C starts to send last byte
+        // DMA has read second to last byte to data register; I2C starts to read last byte
         if (dma_is_complete(dma)) {
-            dma_clear_interrupt(dma);
-            dma_clear_complete(dma); // revisit for Teensy 3.2
-            pi->sub_state = SUB_STATE_DATA;
-            pi->processed = WK_PORT_EVENT_DATA_LEN(pi->response) - 1;
             // disable DMA and signal NAK
             i2c->C1 = I2C_C1_IICEN | I2C_C1_IICIE | I2C_C1_MST | I2C_C1_TXAK;
             i2c->S = I2C_S_IICIF; // clear flags
 
+            dma_clear_interrupt(dma);
+            dma_clear_complete(dma);
+            pi->sub_state = SUB_STATE_DATA;
+            pi->processed = WK_PORT_EVENT_DATA_LEN(pi->response) - 1;
+
         } else {
-            uint32_t processed = WK_PORT_EVENT_DATA_LEN(pi->request) - 1 - dma_bytes_remaining(dma);
+            i2c->S = I2C_S_ARBL | I2C_S_IICIF; // clear flags
+            i2c->C1 = I2C_C1_IICEN; // disable, set to RX
+
             dma_clear_interrupt(dma);
             dma_clear_error(dma);
 
-            i2c->S = I2C_S_ARBL | I2C_S_IICIF; // clear flags
-            i2c->C1 = I2C_C1_IICEN; // disable, set to RX
+            uint32_t processed = WK_PORT_EVENT_DATA_LEN(pi->request) - 1 - dma_bytes_remaining(dma);
             read_complete(port, I2C_STATUS_UNKNOWN, processed);
         }
     }
@@ -792,7 +785,7 @@ void write_complete(i2c_port port, uint8_t status, uint16_t len)
     // free request
     mm_free(pi->request);
     pi->request = NULL;
-    pi->state = STATE_WAITING;
+    pi->state = STATE_IDLE;
 
     // send completion message
     wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
@@ -814,7 +807,7 @@ void read_complete(i2c_port port, uint8_t status, uint16_t len)
 
     // clean up
     pi->response = NULL;
-    pi->state = STATE_WAITING;
+    pi->state = STATE_IDLE;
 
     check_queue(port);
 }
@@ -849,6 +842,7 @@ uint8_t append_request(i2c_port port, wk_port_request* request)
         return 1;
     }
     
+    DEBUG_OUT("I2C request overflow");
     return 0; // failed (queue full)
 }
 

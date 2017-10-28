@@ -46,12 +46,11 @@ void i2c_reset();
 
 i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency);
 void i2c_port_release(i2c_port port);
-void i2c_port_reset(i2c_port port);
 
 // Always takes ownership of the request
-void i2c_master_start_send(wk_port_request* request);
+void i2c_master_start_tx(wk_port_request* request);
 // Does not take ownership of the request
-void i2c_master_start_recv(wk_port_request* request);
+void i2c_master_start_rx(wk_port_request* request);
 
 
 #ifdef __cplusplus

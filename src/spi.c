@@ -275,8 +275,9 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
         PCR(MISO_map[miso_port].port, MISO_map[miso_port].pin) = PORT_PCR_MUX(MISO_map[miso_port].alt);
     
     // Enable interrupt
+    NVIC_CLEAR_PENDING(spi_port == 0 ? IRQ_SPI0 : IRQ_SPI1);
     NVIC_ENABLE_IRQ(spi_port == 0 ? IRQ_SPI0 : IRQ_SPI1);
-
+    
     // configure DMAs
     uint8_t dma_tx = dma_acquire_channel();
     pi->dma_tx = dma_tx;
@@ -445,8 +446,8 @@ void spi_port_release(spi_port port)
     if (pi->dma_rx != DMA_CHANNEL_ERROR)
         dma_release_channel(pi->dma_rx);
 
-    NVIC_CLEAR_PENDING(port == 0 ? IRQ_SPI0 : IRQ_SPI1);
-
+    NVIC_DISABLE_IRQ(port == 0 ? IRQ_SPI0 : IRQ_SPI1);
+        
     wk_port_request* request = pi->request;
     if (request != NULL) {
         digital_pin cs = request->action_attribute2;

@@ -109,6 +109,7 @@ uint32_t dma_bytes_remaining(uint8_t channel)
 
 void dma_attach_interrupt(uint8_t channel, void (*isr)(void)) {
     _VectorsRam[IRQ_DMA_CH0 + 16 + channel] = isr;
+    NVIC_CLEAR_PENDING(IRQ_DMA_CH0 + channel);
     NVIC_ENABLE_IRQ(IRQ_DMA_CH0 + channel);
 }
 
@@ -316,6 +317,7 @@ uint32_t dma_bytes_remaining(uint8_t channel)
 
 void dma_attach_interrupt(uint8_t channel, void (*isr)(void)) {
     _VectorsRam[IRQ_DMA_CH0 + 16 + channel] = isr;
+    NVIC_CLEAR_PENDING(IRQ_DMA_CH0 + channel);
     NVIC_ENABLE_IRQ(IRQ_DMA_CH0 + channel);
 }
 

@@ -111,6 +111,9 @@ void* mm_alloc(uint32_t size)
 
 void mm_free(void* ptr)
 {
+    if (ptr == NULL)
+        return;
+        
     chunk_t* chunk = (chunk_t*)(((uint32_t*)ptr) - 1);
     uint32_t size = chunk->size;
     
