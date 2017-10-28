@@ -309,6 +309,13 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
                 i2c_master_start_tx(request);
             }
 
+
+        } else if (request->action == WK_PORT_ACTION_RESET) {
+            if (port_group == PORT_GROUP_I2C) {
+                take_ownership_or_copy(&request, deallocate_msg);
+                i2c_reset_bus(request);
+            }
+
         }
     }
 }
@@ -413,4 +420,5 @@ void systick_isr(void)
 {
 	systick_millis_count++;
     analog_timer_tick();
+    i2c_timer_tick();
 }

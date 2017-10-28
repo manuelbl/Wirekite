@@ -18,6 +18,7 @@
 #include "i2c.h"
 #include "dma.h"
 #include "mem.h"
+#include "ports.h"
 #include "usb.h"
 #include "wirekite.h"
 #include "debug.h"
@@ -68,17 +69,6 @@ static const port_map_t port_map[] = {
 };
 
 #endif
-
-
-static volatile uint32_t* PCR_ADDR[] = {
-    &PORTA_PCR0,
-    &PORTB_PCR0,
-    &PORTC_PCR0,
-    &PORTD_PCR0,
-    &PORTE_PCR0
-};
-
-#define PCR(port, pin) (*(PCR_ADDR[port] + pin))
 
 
 typedef struct {
@@ -152,6 +142,7 @@ static const freq_div_t freq_divs[] = {
 #define STATE_IDLE  1
 #define STATE_TX 2
 #define STATE_RX 3
+#define STATE_RESET_BUS 4
 
 #define SUB_STATE_NONE 0
 #define SUB_STATE_ADDR 1
@@ -196,8 +187,10 @@ static void dma_isr_handler(uint8_t port);
 static void write_complete(i2c_port port, uint8_t status, uint16_t len);
 static void read_complete(i2c_port port, uint8_t status, uint16_t len);
 static wk_port_request* get_next_request(i2c_port port);
-static uint8_t append_request(i2c_port port, wk_port_request* msg);
+static void append_request(i2c_port port, wk_port_request* msg);
 static void clear_request_queue(i2c_port port);
+static void reset_bus_tick(i2c_port port);
+static void reset_bus_now(wk_port_request* request);
 
 
 void i2c_init()
@@ -222,7 +215,6 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
         return I2C_PORT_ERROR;
 
     pi->state = STATE_IDLE;
-    pi->pins = pins;
 
     SIM_SCGC4 |= port == 0 ? SIM_SCGC4_I2C0 : SIM_SCGC4_I2C1;
 
@@ -242,10 +234,11 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
     NVIC_ENABLE_IRQ(port == 0 ? IRQ_I2C0 : IRQ_I2C1);
     
     // configure SCL pin
-    PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = PORT_PCR_MUX(port_map[pins].scl_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
+    const port_map_t* map = port_map + pi->pins;
+    PCR(map->scl_port, map->scl_pin) = PORT_PCR_MUX(map->scl_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
     
     // configure SDA pin
-    PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = PORT_PCR_MUX(port_map[pins].sda_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
+    PCR(map->sda_port, map->sda_pin) = PORT_PCR_MUX(map->sda_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
 
     // configure DMA
     uint8_t dma = dma_acquire_channel();
@@ -269,6 +262,13 @@ void i2c_port_release(i2c_port port)
     if (pi->state == STATE_INACTIVE)
         return;
     
+    const port_map_t* map = port_map + pi->pins;
+    if (pi->state == STATE_RESET_BUS) {
+        // restore pin settings
+        uint32_t scl_mask = 1 << (uint32_t)map->scl_pin;
+        GPIO_PORT[map->scl_pin]->PCOR = scl_mask; // set SCL to low
+        GPIO_PORT[map->scl_port]->PDDR &= ~scl_mask; // SCL direction: input
+    }
     pi->state = STATE_INACTIVE;
     pi->sub_state = SUB_STATE_NONE;
     
@@ -277,9 +277,8 @@ void i2c_port_release(i2c_port port)
     if (pi->dma != DMA_CHANNEL_ERROR)
         dma_release_channel(pi->dma);
     
-    uint8_t pins = pi->pins;
-    PCR(port_map[pins].scl_port, port_map[pins].scl_pin) = 0;
-    PCR(port_map[pins].sda_port, port_map[pins].sda_pin) = 0;
+    PCR(map->scl_port, map->scl_pin) = 0;
+    PCR(map->sda_port, map->sda_pin) = 0;
 
     KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
     i2c->C1 = 0;
@@ -305,9 +304,7 @@ void i2c_master_start_tx(wk_port_request* request)
 
     if (port_info[port].state != STATE_IDLE) {
         // if I2C port busy then queue request
-        uint8_t success = append_request(port, request);
-        if (!success)
-            mm_free(request);
+        append_request(port, request);
     } else {
         // start request immediately
         master_start_tx_now(request);
@@ -378,10 +375,7 @@ void i2c_master_start_rx(wk_port_request* request)
         }
         
         memcpy(copy, request, request->header.message_size);
-
-        uint8_t success = append_request(port, copy);
-        if (!success)
-            mm_free(copy);
+        append_request(port, copy);
 
     } else {
         master_start_rx_now(request);
@@ -477,6 +471,8 @@ void check_queue(i2c_port port)
         if (request->action == WK_PORT_ACTION_RX_DATA) {
             master_start_rx_now(request);
             mm_free(request);
+        } else if (request->action == WK_PORT_ACTION_RESET) {
+            reset_bus_now(request);
         } else {
             master_start_tx_now(request);
         }
@@ -830,7 +826,7 @@ wk_port_request* get_next_request(i2c_port port)
 }
 
 
-uint8_t append_request(i2c_port port, wk_port_request* request)
+void append_request(i2c_port port, wk_port_request* request)
 {
     port_info_t* pi = &port_info[port];
     uint8_t head = pi->circ_request_head + 1;
@@ -839,11 +835,10 @@ uint8_t append_request(i2c_port port, wk_port_request* request)
     if (head != pi->circ_request_tail) {
         pi->circ_request_buf[head] = request;
         pi->circ_request_head = head;
-        return 1;
+    } else {
+        DEBUG_OUT("I2C request overflow");
+        mm_free(request);
     }
-    
-    DEBUG_OUT("I2C request overflow");
-    return 0; // failed (queue full)
 }
 
 
@@ -855,5 +850,100 @@ void clear_request_queue(i2c_port port)
             break;
         mm_free(request);
     }
+}
+
+
+// --- reset bus
+
+// Takes owernship of request
+void i2c_reset_bus(wk_port_request* request)
+{
+    i2c_port port = request->header.port_id;
+    if (port >= NUM_I2C_PORTS) {
+        mm_free(request);
+        return;
+    }
+
+    if (port_info[port].state != STATE_IDLE) {
+        // if I2C port busy then queue request
+        append_request(port, request);
+    } else {
+        // start request immediately
+        reset_bus_now(request);
+    }
+}
+
+
+void reset_bus_now(wk_port_request* request)
+{
+    // reset bus manually simulating the SCL clock
+    // until the slave releases SDA
+
+    i2c_port port = request->header.port_id;
+    port_info_t* pi = &port_info[port];
+    pi->state = STATE_RESET_BUS;
+    pi->request = request;
+    pi->processed = 0;
+
+    // reconfigure the pins
+    const port_map_t* map = port_map + pi->pins;
+    uint32_t scl_mask = 1 << (uint32_t)map->scl_pin;
+    GPIO_PORT[map->scl_pin]->PSOR = scl_mask; // set SCL to high
+    GPIO_PORT[map->scl_port]->PDDR |= scl_mask; // SCL direction: output
+    uint32_t sda_mask = 1 << (uint32_t)map->sda_pin;
+    GPIO_PORT[map->sda_port]->PDDR &= ~sda_mask; // SDA direction: input
+
+    PCR(map->scl_port, map->scl_pin) = PORT_PCR_MUX(1) | PORT_PCR_SRE;
+    PCR(map->sda_port, map->sda_pin) = PORT_PCR_MUX(1);
+
+    KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
+    i2c->C1 = 0;
+    i2c->FLT = I2C_FLT_STOPF | I2C_FLT_STARTF;
+    i2c->S = I2C_S_IICIF | I2C_S_ARBL;
+}
+
+
+void reset_bus_tick(i2c_port port)
+{
+    port_info_t* pi = &port_info[port];
+    pi->processed++;
+
+    const port_map_t* map = port_map + pi->pins;
+    uint32_t sda_mask = 1 << (uint32_t)map->sda_pin;
+    uint32_t sda_value = GPIO_PORT[map->sda_port]->PDIR & sda_mask;
+
+    if (sda_value == 0 && pi->processed < 18) {
+        // toggle SCL
+        uint32_t scl_mask = 1 << (uint32_t)map->scl_pin;
+        if ((pi->processed & 1) == 0) 
+            GPIO_PORT[map->scl_pin]->PSOR = scl_mask; // set SCL to high
+        else
+            GPIO_PORT[map->scl_pin]->PCOR = scl_mask; // set SCL to low
+
+    } else {
+        // finished; restore I2C configuration
+        KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
+        i2c->C1 = I2C_C1_IICEN;
+        i2c->S = I2C_S_IICIF | I2C_S_ARBL;
+
+        NVIC_CLEAR_PENDING(port == 0 ? IRQ_I2C0 : IRQ_I2C1);
+    
+        PCR(map->scl_port, map->scl_pin) = PORT_PCR_MUX(map->scl_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
+        PCR(map->sda_port, map->sda_pin) = PORT_PCR_MUX(map->sda_alt) | PORT_PCR_ODE | PORT_PCR_SRE | PORT_PCR_DSE;
+
+        uint32_t scl_mask = 1 << (uint32_t)map->scl_pin;
+        GPIO_PORT[map->scl_pin]->PCOR = scl_mask; // set SCL to low
+        GPIO_PORT[map->scl_port]->PDDR &= ~scl_mask; // SCL direction: input
+
+        write_complete(port, sda_value == 0 ? I2C_STATUS_TIMEOUT : I2C_STATUS_OK, 0);
+    }
+}
+
+
+void i2c_timer_tick()
+{
+    for (int i = 0; i < NUM_I2C_PORTS; i++)
+        if (port_info[i].state == STATE_RESET_BUS)
+            reset_bus_tick(i);
 }
     

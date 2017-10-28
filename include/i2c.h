@@ -43,9 +43,12 @@ typedef uint8_t i2c_port;
 
 void i2c_init();
 void i2c_reset();
+void i2c_timer_tick();
 
 i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency);
 void i2c_port_release(i2c_port port);
+// Always takes ownership of the request
+void i2c_reset_bus(wk_port_request* request);
 
 // Always takes ownership of the request
 void i2c_master_start_tx(wk_port_request* request);

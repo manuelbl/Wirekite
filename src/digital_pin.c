@@ -6,6 +6,7 @@
  */
 
 #include "digital_pin.h"
+#include "ports.h"
 #include "proto.h"
 #include "wirekite.h"
 #include "kinetis.h"
@@ -100,35 +101,6 @@ static const pin_map_t pin_map[] = {
 #define NUM_PINS (sizeof(pin_map)/sizeof(pin_map[0]))
 
 
-static volatile uint32_t* PCR_ADDR[] = {
-    &PORTA_PCR0,
-    &PORTB_PCR0,
-    &PORTC_PCR0,
-    &PORTD_PCR0,
-    &PORTE_PCR0
-};
-
-#define PCR_PTR(map) (PCR_ADDR[map.port] + map.pin)
-
-
-typedef struct __attribute__((packed, aligned(4))) {
-    volatile uint32_t PDOR; // Port Data Output Register
-    volatile uint32_t PSOR; // Port Set Output Register
-    volatile uint32_t PCOR; // Port Clear Output Register
-    volatile uint32_t PTOR; // Port Toggle Output Register
-    volatile uint32_t PDIR; // Port Data Input Register
-    volatile uint32_t PDDR; // Port Data Direction Register
-} GPIO_PORT_t;
-
-static GPIO_PORT_t* GPIO_PORT[] = {
-    (GPIO_PORT_t*)&GPIOA_PDOR,
-    (GPIO_PORT_t*)&GPIOB_PDOR,
-    (GPIO_PORT_t*)&GPIOC_PDOR,
-    (GPIO_PORT_t*)&GPIOD_PDOR,
-    (GPIO_PORT_t*)&GPIOE_PDOR
-};
-
-
 // information about pins in use
 typedef struct {
     pin_map_t map;
@@ -212,7 +184,7 @@ digital_pin digital_pin_init(uint8_t pin_idx, uint8_t direction, uint16_t attrib
     }
 
     // assign physical pin
-    volatile uint32_t* pcr_ptr = PCR_PTR(map);
+    volatile uint32_t* pcr_ptr = PCR_PTR(map.port, map.pin);
     *pcr_ptr = pin_control;
 
     // configure interrupt if needed
@@ -241,8 +213,7 @@ void digital_pin_release(digital_pin pin)
     pins[pin].is_used = 0;
 
     // disable pin
-    volatile uint32_t* pcr_ptr = PCR_PTR(map);
-    *pcr_ptr = PORT_PCR_ISF;
+    PCR(map.port, map.pin) = PORT_PCR_ISF;
 
     uint32_t mask = 1 << (uint32_t)map.pin;
     
@@ -290,7 +261,7 @@ digital_pin digital_pin_get_interrupt_pin()
         if (pins[i].uses_interrupt) {
 
             // check if the pin's interrupt flag is set
-            volatile uint32_t* pcr_ptr = PCR_PTR(pins[i].map);
+            volatile uint32_t* pcr_ptr = PCR_PTR(pins[i].map.port, pins[i].map.pin);
             if (*pcr_ptr & PORT_PCR_ISF) {
                 *pcr_ptr |= PORT_PCR_ISF; // clear the flag
                 return i;
