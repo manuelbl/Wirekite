@@ -8,6 +8,7 @@
 #include <string.h>
 #include "pwm.h"
 #include "kinetis.h"
+#include "ports.h"
 #include "pwm_config.h"
 #include "debug.h"
 
@@ -102,16 +103,6 @@ static FTM_t* FTM[] = {
 
 #define NUM_TIMERS (sizeof(FTM)/sizeof(FTM[0]))
 
-
-static volatile uint32_t* PCR_ADDR[] = {
-    &PORTA_PCR0,
-    &PORTB_PCR0,
-    &PORTC_PCR0,
-    &PORTD_PCR0,
-    &PORTE_PCR0
-};
-
-#define PCR(map) (*(PCR_ADDR[map.port] + map.pin))
 
 static uint16_t modulos[NUM_TIMERS];
 static int32_t  values[NUM_PINS];
@@ -235,7 +226,7 @@ pwm_pin pwm_pin_init(uint8_t digi_pin, int32_t initial_value)
     pwm_pin_set_value(pin, initial_value);
 
     pin_map_t map = pin_map[pin];
-    PCR(map) = PORT_PCR_MUX(map.alt) | PORT_PCR_SRE;
+    PCR(map.port, map.pin) = PORT_PCR_MUX(map.alt) | PORT_PCR_SRE;
 
     return pin;
 }
@@ -247,7 +238,7 @@ void pwm_pin_release(pwm_pin port_id)
         return;
 
     pin_map_t map = pin_map[port_id];
-    PCR(map) = 0;
+    PCR(map.port, map.pin) = 0;
         
     pwm_pin_set_value(port_id, 0);
     values[port_id] = -1;

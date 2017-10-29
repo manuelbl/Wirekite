@@ -13,6 +13,7 @@
 #include "digital_pin.h"
 #include "dma.h"
 #include "mem.h"
+#include "ports.h"
 #include "usb.h"
 #include "wirekite.h"
 #include "debug.h"
@@ -66,17 +67,6 @@ typedef struct {
     uint8_t f_div;
     uint16_t divider;
 } freq_div_t;
-
-
-static volatile uint32_t* PCR_ADDR[] = {
-    &PORTA_PCR0,
-    &PORTB_PCR0,
-    &PORTC_PCR0,
-    &PORTD_PCR0,
-    &PORTE_PCR0
-};
-
-#define PCR(port, pin) (*(PCR_ADDR[port] + pin))
 
 
 static const freq_div_t freq_divs[] = {
