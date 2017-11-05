@@ -33,15 +33,15 @@ typedef struct {
     uint32_t spi : 2;
 } port_map_t;
 
+#if defined(__MKL26Z64__)
+
+#define NUM_SPI_PORTS 2
 
 static const port_map_t SCK_map[] = {
     { 13, PORT_C,  5, 2, 0 }, // PTC5
     { 14, PORT_D,  1, 2, 0 }, // PTD1
     { 20, PORT_D,  5, 2, 1 }  // PTD5
 };
-
-#define NUM_SCK (sizeof(SCK_map)/sizeof(SCK_map[0]))
-
 
 static const port_map_t MOSI_map[] = {
     { 11, PORT_C,  6, 2, 0 }, // PTC6
@@ -50,16 +50,44 @@ static const port_map_t MOSI_map[] = {
     { 21, PORT_D,  6, 2, 1 }  // PTD6
 };    
 
-#define NUM_MOSI (sizeof(MOSI_map)/sizeof(MOSI_map[0]))
-
-
 static const port_map_t MISO_map[] = {
     { 12, PORT_C,  7, 2, 0 }, // PTC7
     {  8, PORT_D,  3, 2, 0 }, // PTD3
     {  1, PORT_B, 17, 2, 1 }, // PTB17
     {  5, PORT_D,  7, 2, 1 }  // PTD7
+};
+
+#elif defined(__MK20DX256__)
+
+// In the MK20DX256, only SPI 0 module works.
+// SPI 1 has no SCK pin!
+
+#define NUM_SPI_PORTS 2
+
+static const port_map_t SCK_map[] = {
+    { 13, PORT_C,  5, 2, 0 }, // PTC5
+    { 14, PORT_D,  1, 2, 0 }  // PTD1
+};
+
+static const port_map_t MOSI_map[] = {
+//    { 26, PORT_E,  1, 2, 1 }, // PTE1
+//    {  0, PORT_B, 16, 2, 1 }, // PTB16
+    { 11, PORT_C,  6, 2, 0 }, // PTC6
+    {  7, PORT_D,  2, 2, 0 }  // PTD2
 };    
 
+static const port_map_t MISO_map[] = {
+//    { 26, PORT_E,  1, 7, 1 }, // PTE1
+//    {  1, PORT_B, 17, 2, 1 }, // PTB17
+    { 12, PORT_C,  7, 2, 0 }, // PTC7
+    {  8, PORT_D,  3, 2, 0 }  // PTD3
+};
+
+#endif
+
+
+#define NUM_SCK (sizeof(SCK_map)/sizeof(SCK_map[0]))
+#define NUM_MOSI (sizeof(MOSI_map)/sizeof(MOSI_map[0]))
 #define NUM_MISO (sizeof(MISO_map)/sizeof(MISO_map[0]))
 
 
@@ -68,6 +96,8 @@ typedef struct {
     uint16_t divider;
 } freq_div_t;
 
+
+#if defined(__MKL26Z64__)
 
 static const freq_div_t freq_divs[] = {
     { 0x0, 3 },
@@ -112,6 +142,81 @@ static const freq_div_t freq_divs[] = {
     { 0x78, 0 }
 };
 
+#elif defined(__MK20DX256__)
+
+#define F_DIV_DBR_MASK 0x40
+#define F_DIV_DBR_OFFSET 6
+#define F_DIV_PBR_MASK 0x30
+#define F_DIV_PBR_OFFSET 4
+#define F_DIV_BR_MASK 0x0f
+#define F_DIV_BR_OFFSET 0
+
+static const freq_div_t freq_divs[] = {
+    { 0x40, 2 },
+    { 0x50, 3 },
+    { 0x00, 4 },
+    { 0x60, 5 },
+    { 0x10, 6 },
+    { 0x70, 7 },
+    { 0x01, 8 },
+    { 0x52, 9 },
+    { 0x20, 11 },
+    { 0x11, 13 },
+    { 0x30, 14 },
+    { 0x62, 15 },
+    { 0x03, 17 },
+    { 0x12, 19 },
+    { 0x21, 20 },
+    { 0x72, 22 },
+    { 0x13, 26 },
+    { 0x31, 29 },
+    { 0x22, 31 },
+    { 0x04, 36 },
+    { 0x23, 41 },
+    { 0x32, 45 },
+    { 0x14, 52 },
+    { 0x33, 60 },
+    { 0x05, 72 },
+    { 0x24, 88 },
+    { 0x15, 104 },
+    { 0x34, 120 },
+    { 0x06, 143 },
+    { 0x25, 175 },
+    { 0x16, 207 },
+    { 0x35, 239 },
+    { 0x07, 286 },
+    { 0x26, 351 },
+    { 0x17, 415 },
+    { 0x36, 479 },
+    { 0x08, 572 },
+    { 0x27, 701 },
+    { 0x18, 830 },
+    { 0x37, 958 },
+    { 0x09, 1145 },
+    { 0x28, 1402 },
+    { 0x19, 1659 },
+    { 0x38, 1916 },
+    { 0x0A, 2290 },
+    { 0x29, 2804 },
+    { 0x1A, 3318 },
+    { 0x39, 3831 },
+    { 0x0B, 4579 },
+    { 0x2A, 5609 },
+    { 0x1B, 6636 },
+    { 0x3A, 7663 },
+    { 0x0C, 9159 },
+    { 0x2B, 11217 },
+    { 0x1C, 13273 },
+    { 0x3B, 15326 },
+    { 0x0D, 18318 },
+    { 0x2C, 22435 },
+    { 0x1D, 26545 },
+    { 0x3C, 30652 },
+    { 0x0E, 0 }
+};
+
+#endif
+
 #define NUM_F_DIVS (sizeof(freq_divs)/sizeof(freq_divs[0]))
 
 
@@ -130,7 +235,8 @@ typedef struct {
         wk_port_request* request;
         wk_port_event* response;
     };
-    uint16_t processed;
+    uint16_t tx_processed;
+    uint16_t rx_processed;
     uint8_t circ_request_head;
     uint8_t circ_request_tail;
     uint8_t dma_tx;
@@ -142,17 +248,20 @@ typedef struct {
     wk_port_request* circ_request_buf[CIRC_QUEUE_SIZE];
 } spi_port_info_t;
 
-#define NUM_SPI_PORTS 2
-
 static spi_port_info_t port_info[NUM_SPI_PORTS];
 
 
-static KINETISL_SPI_t* get_spi_ctrl(spi_port port);
+#if defined(__MKL26Z64__)
+#define SPI_t KINETISL_SPI_t
+#elif defined(__MK20DX256__)
+#define SPI_t KINETISK_SPI_t
+#endif
+static SPI_t* get_spi_ctrl(spi_port port);
+static void set_frequency(SPI_t* spi, uint32_t bus_rate, uint32_t frequency);
 static void dma_spi0_tx_isr();
 static void dma_spi0_rx_isr();
 static void dma_spi1_tx_isr();
 static void dma_spi1_rx_isr();
-static void set_frequency(KINETISL_SPI_t* spi, uint32_t bus_rate, uint32_t frequency);
 static void master_start_send_2(wk_port_request* request);
 static void set_digital_output_2(wk_port_request* request);
 static void write_complete(spi_port port, uint8_t status, uint16_t len);
@@ -174,7 +283,11 @@ void spi_reset()
         if (port_info[i].state != STATE_INACTIVE)
             spi_port_release(i);
 
+#if defined(__MKL26Z64__)
     SIM_SCGC4 &= ~(SIM_SCGC4_SPI0 | SIM_SCGC4_SPI1);
+#elif defined(__MK20DX256__)
+    SIM_SCGC6 &= ~(SIM_SCGC6_SPI0 | SIM_SCGC6_SPI1);
+#endif
 }
 
 spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, uint32_t frequency)
@@ -231,20 +344,24 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
     pi->miso = miso_port;
 
     // enable clock
-    if (spi_port == 0) {
-        SIM_SCGC4 |= SIM_SCGC4_SPI0;
-    } else if (spi_port == 1) {
-        SIM_SCGC4 |= SIM_SCGC4_SPI1;
-    }
+#if defined(__MKL26Z64__)
+    SIM_SCGC4 |= spi_port == 0 ? SIM_SCGC4_SPI0 : SIM_SCGC4_SPI1;
+#elif defined(__MK20DX256__)
+    SIM_SCGC6 |= spi_port == 0 ? SIM_SCGC6_SPI0 : SIM_SCGC6_SPI1;
+#endif
 
     // initialize SPI module
-    KINETISL_SPI_t* spi = get_spi_ctrl(spi_port);
+    SPI_t* spi = get_spi_ctrl(spi_port);
+
+#if defined(__MKL26Z64__)
 
     uint8_t c1 = SPI_C1_MSTR | SPI_C1_SPE;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE2 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
         c1 |= SPI_C1_CPOL;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE1 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
-        c1 |= SPI_C1_CPHA;    
+        c1 |= SPI_C1_CPHA;
+    if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_LSB_FIRST)
+        c1 |= SPI_C1_LSBFE;
     spi->C1 = c1;
 
     uint8_t c2 = 0;
@@ -254,6 +371,22 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
 
     set_frequency(spi, spi_port == 0 ? F_BUS : F_CPU, frequency);
     
+#elif defined(__MK20DX256__)
+
+    spi->MCR = SPI_MCR_MSTR | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF | SPI_MCR_HALT | SPI_MCR_DCONF(0);
+    uint32_t ctar = SPI_CTAR_FMSZ(7);
+    if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE2 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
+        ctar |= SPI_CTAR_CPOL;
+    if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE1 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
+        ctar |= SPI_CTAR_CPHA;
+    if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_LSB_FIRST)
+        ctar |= SPI_CTAR_LSBFE;
+    spi->CTAR0 = ctar;
+
+    set_frequency(spi, F_BUS, frequency);
+    
+#endif
+
     // configure SCK
     PCR(SCK_map[sck_port].port, SCK_map[sck_port].pin) = PORT_PCR_MUX(SCK_map[sck_port].alt) | PORT_PCR_DSE;
     
@@ -329,36 +462,64 @@ void master_start_send_2(wk_port_request* request)
     spi_port_info_t* pi = &port_info[port];
     pi->state = STATE_TX;
     pi->request = request;
-    pi->processed = 0;
+    pi->tx_processed = 0;
+    pi->rx_processed = 0;
     
     // setup DMA
-    KINETISL_SPI_t* spi = get_spi_ctrl(port);
+    SPI_t* spi = get_spi_ctrl(port);
     uint8_t dma_tx = pi->dma_tx;
     uint8_t dma_rx = pi->dma_rx;
     
     uint16_t data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
-    uint8_t use_dma = dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
+    uint8_t use_dma = 0; //dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
 
     if (use_dma) {
         // switch to DMA for bulk of data
         dma_source_byte_buffer(dma_tx, request->data + 1, data_len - 1);
-        dma_dest_byte(dma_tx, &spi->DL);
-        dma_source_byte(dma_rx, &spi->DL);
+//        dma_dest_byte(dma_tx, &spi->DL);
+//        dma_source_byte(dma_rx, &spi->DL);
         dma_dest_byte_buffer(dma_rx, request->data, data_len);
         // DMA will start after first byte    
     } else {
+#if defined(__MKL26Z64__)
         spi->C1 |= SPI_C1_SPIE;
+#elif defined(__MK20DX256__)
+        spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+        spi->RSER = SPI_RSER_RFDF_RE;
+        spi->MCR &= ~SPI_MCR_HALT; // start SPI module
+#endif
     }
+
+#if defined(__MKL26Z64__)
 
     // transmit first byte
     while ((spi->S & SPI_S_SPTEF) == 0);
     spi->DL = request->data[0];
 
     if (use_dma) {
-        spi->C2 |= SPI_C2_TXDMAE | SPI_C2_RXDMAE;
+        spi->C2 |= SPI_C2_RXDMAE | SPI_C2_TXDMAE;
         dma_enable(dma_rx);
         dma_enable(dma_tx);
     }
+
+#elif defined(__MK20DX256__)
+
+    // push first bytes into FIFO
+    int processed = 0;
+    int len = WK_PORT_REQUEST_DATA_LEN(request);
+    while (processed < len && (spi->SR & SPI_SR_TFFF) != 0) {
+        uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
+        if (processed + 1 == len)
+            pushr |= SPI_PUSHR_EOQ;
+        spi->PUSHR = pushr;
+        spi->SR = SPI_SR_TFFF;
+        processed++;
+    }
+    if (processed < len)
+        spi->RSER |= SPI_RSER_TFFF_RE;
+    pi->tx_processed = processed;
+        
+#endif
 }
 
 
@@ -394,7 +555,7 @@ void set_digital_output_2(wk_port_request* request)
 }
 
 
-void set_frequency(KINETISL_SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
+void set_frequency(SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
 {
     uint16_t target_div = (bus_rate + frequency / 2) / frequency;
 
@@ -412,7 +573,27 @@ void set_frequency(KINETISL_SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
     //    forall i  < upper: freq_divs[i].divider <  target_div
     //    forall i => upper: freq_divs[i].divider >= target_div
 
+#if defined(__MKL26Z64__)
+
     spi->BR = freq_divs[upper].f_div;
+
+#elif defined(__MK20DX256__)
+
+    uint32_t fdiv = freq_divs[upper].f_div;
+    uint32_t ctar = spi->CTAR0;
+    if ((fdiv & F_DIV_DBR_MASK) != 0)
+        ctar = SPI_CTAR_DBR;
+    uint32_t pbr = (fdiv & F_DIV_PBR_MASK) >> F_DIV_PBR_OFFSET;
+    ctar |= SPI_CTAR_PBR(pbr);
+    uint32_t br = (fdiv & F_DIV_BR_MASK) >> F_DIV_BR_OFFSET;
+    ctar |= SPI_CTAR_BR(br);
+    if (ctar & SPI_CTAR_CPHA)
+        ctar |= SPI_CTAR_ASC(br);
+    else
+        ctar |= SPI_CTAR_CSSCK(br);
+    spi->CTAR0 = ctar;
+
+#endif 
 }
 
 
@@ -427,9 +608,16 @@ void spi_port_release(spi_port port)
 
     pi->state = STATE_INACTIVE;
 
-    KINETISL_SPI_t* spi = get_spi_ctrl(port);
+    SPI_t* spi = get_spi_ctrl(port);
+
+#if defined(__MKL26Z64__)
     spi->C1 = 0;
     spi->C2 = 0;
+#elif defined(__MK20DX256__)
+    spi->MCR = SPI_MCR_MSTR | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF | SPI_MCR_HALT | SPI_MCR_HALT | SPI_MCR_DCONF(0);
+    spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+    spi->RSER = 0;
+#endif    
     
     if (pi->dma_tx != DMA_CHANNEL_ERROR)
         dma_release_channel(pi->dma_tx);
@@ -458,7 +646,8 @@ void spi_port_release(spi_port port)
 
 void dma_tx_isr_handler(uint8_t port)
 {
-    KINETISL_SPI_t* spi = get_spi_ctrl(port);
+    /*
+    SPI_t* spi = get_spi_ctrl(port);
     spi_port_info_t* pi = &port_info[port];
     uint8_t dma = pi->dma_tx;
 
@@ -503,12 +692,14 @@ void dma_tx_isr_handler(uint8_t port)
     // disable TX DMA
     dma_disable(dma);
     dma_clear_interrupt(dma);
+    */
 }
 
 
 void dma_rx_isr_handler(uint8_t port)
 {
-    KINETISL_SPI_t* spi = get_spi_ctrl(port);
+    /*
+    SPI_t* spi = get_spi_ctrl(port);
     spi_port_info_t* pi = &port_info[port];
     uint8_t dma = pi->dma_rx;
 
@@ -551,7 +742,8 @@ void dma_rx_isr_handler(uint8_t port)
     dma_disable(dma);
     dma_clear_interrupt(dma);
 
-    write_complete(port, status, processed);        
+    write_complete(port, status, processed);
+    */    
 }
 
 
@@ -603,8 +795,9 @@ void write_complete(spi_port port, uint8_t status, uint16_t len)
     mm_free(request);
     pi->request = NULL;
     pi->state = STATE_IDLE;
-    pi->processed = 0;
-
+    pi->tx_processed = 0;
+    pi->rx_processed = 0;
+    
     // send completion message
     wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
 
@@ -684,12 +877,14 @@ void clear_request_queue(spi_port port)
 void spi_isr_handler(uint8_t port)
 {
     spi_port_info_t* pi = &port_info[port];
-    KINETISL_SPI_t* spi = get_spi_ctrl(port);
+    SPI_t* spi = get_spi_ctrl(port);
 
     wk_port_request* request = pi->request;
 
+#if defined(__MKL26Z64__)
+
     // read received data byte;
-    // must first read status register even though we now
+    // must first read status register even though we know
     // data byte is ready as interrupt was triggered;
     // replaces: while ((spi->S & SPI_S_SPRF) == 0);
     uint8_t __attribute__((unused)) dummy = spi->S;
@@ -712,15 +907,56 @@ void spi_isr_handler(uint8_t port)
         uint8_t __attribute__((unused)) dummy = spi->S;
         spi->DL = request->data[processed];
     }
+
+#elif defined(__MK20DX256__)
+
+    int len = WK_PORT_EVENT_DATA_LEN(request);
+
+    // read bytes in RX FIFO
+    int processed = pi->rx_processed;
+
+    while (processed < len && spi->SR & SPI_SR_RFDF) {
+        request->data[processed] = (uint8_t)spi->POPR;
+        spi->SR = SPI_SR_RFDF;
+        processed++;
+    }
+    pi->rx_processed = processed;
+
+    // write bytes to TX FIFO
+    processed = pi->tx_processed;
+    while (processed < len && spi->SR & SPI_SR_TFFF) {
+        uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
+        if (processed + 1 == len)
+            pushr |= SPI_PUSHR_EOQ;
+        spi->PUSHR = pushr;
+        spi->SR = SPI_SR_TFFF;
+        processed++;
+    }
+    pi->tx_processed = processed;
+
+    // done?
+    if (pi->rx_processed == len && pi->tx_processed == len) {
+        spi->MCR |= SPI_MCR_HALT; // stop SPI module
+        spi->RSER = 0;
+        spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+        write_complete(port, SPI_STATUS_OK, processed);
+    }
+
+#endif
 }
 
 
-static KINETISL_SPI_t* SPI_CTRL[] = {
+static SPI_t* SPI_CTRL[] = {
+#if defined(__MKL26Z64__)
     &KINETISL_SPI0,
     &KINETISL_SPI1
+#elif defined(__MK20DX256__)
+    &KINETISK_SPI0
+#endif
+    
 };
 
-KINETISL_SPI_t* get_spi_ctrl(uint8_t port)
+SPI_t* get_spi_ctrl(uint8_t port)
 {
     return SPI_CTRL[port];
 }

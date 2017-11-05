@@ -62,8 +62,8 @@ static const pin_map_t pin_map[] = {
     { PORT_B, 16 }, // PTB16
     { PORT_B, 17 }, // PTB17
     { PORT_D, 0 }, // PTD0
-    { PORT_A, 1 }, // PTA12
-    { PORT_A, 2 }, // PTA13
+    { PORT_A, 12 }, // PTA12
+    { PORT_A, 13 }, // PTA13
     { PORT_D, 7 }, // PTD7
     { PORT_D, 4 }, // PTD4
     { PORT_D, 2 }, // PTD2
