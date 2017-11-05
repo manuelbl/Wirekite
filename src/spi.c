@@ -471,26 +471,20 @@ void master_start_send_2(wk_port_request* request)
     uint8_t dma_rx = pi->dma_rx;
     
     uint16_t data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
-    uint8_t use_dma = 0; //dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
+    uint8_t use_dma = dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
+
+#if defined(__MKL26Z64__)
 
     if (use_dma) {
         // switch to DMA for bulk of data
         dma_source_byte_buffer(dma_tx, request->data + 1, data_len - 1);
-//        dma_dest_byte(dma_tx, &spi->DL);
-//        dma_source_byte(dma_rx, &spi->DL);
+        dma_dest_byte(dma_tx, &spi->DL);
+        dma_source_byte(dma_rx, &spi->DL);
         dma_dest_byte_buffer(dma_rx, request->data, data_len);
         // DMA will start after first byte    
     } else {
-#if defined(__MKL26Z64__)
         spi->C1 |= SPI_C1_SPIE;
-#elif defined(__MK20DX256__)
-        spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
-        spi->RSER = SPI_RSER_RFDF_RE;
-        spi->MCR &= ~SPI_MCR_HALT; // start SPI module
-#endif
     }
-
-#if defined(__MKL26Z64__)
 
     // transmit first byte
     while ((spi->S & SPI_S_SPTEF) == 0);
@@ -503,22 +497,49 @@ void master_start_send_2(wk_port_request* request)
     }
 
 #elif defined(__MK20DX256__)
+    
+    // enable SPI module
+    spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+    spi->MCR &= ~SPI_MCR_HALT; // start SPI module
 
-    // push first bytes into FIFO
-    int processed = 0;
-    int len = WK_PORT_REQUEST_DATA_LEN(request);
-    while (processed < len && (spi->SR & SPI_SR_TFFF) != 0) {
-        uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
-        if (processed + 1 == len)
-            pushr |= SPI_PUSHR_EOQ;
-        spi->PUSHR = pushr;
+    if (use_dma) {
+        // prepare DMA
+        dma_source_byte_buffer(dma_tx, request->data + 1, data_len - 1);
+        dma_dest_byte(dma_tx, (volatile uint8_t*)&spi->PUSHR);
+        dma_source_byte(dma_rx, (volatile uint8_t*)&spi->POPR);
+        dma_dest_byte_buffer(dma_rx, request->data, data_len);
+
+        // push first byte to FIFO
+        spi->RSER = SPI_RSER_RFDF_RE | SPI_RSER_RFDF_DIRS;
+        spi->PUSHR = SPI_PUSHR_CTAS(0) | request->data[0];
+        pi->tx_processed = 1;
+    
+        // enable DMA
+        dma_enable(dma_rx);
+        dma_enable(dma_tx);
+
+        // enable TX interrupt and clear TX FIFO fill flag
+        spi->RSER |= SPI_RSER_TFFF_RE | SPI_RSER_TFFF_DIRS;
         spi->SR = SPI_SR_TFFF;
-        processed++;
+
+    } else {
+
+        spi->RSER = SPI_RSER_RFDF_RE;
+
+        // push first bytes into FIFO
+        int processed = 0;
+        int len = WK_PORT_REQUEST_DATA_LEN(request);
+        while (processed < len && (spi->SR & SPI_SR_TFFF) != 0) {
+            uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
+            spi->PUSHR = pushr;
+            spi->SR = SPI_SR_TFFF;
+            processed++;
+        }
+        if (processed < len)
+            spi->RSER |= SPI_RSER_TFFF_RE;
+        pi->tx_processed = processed;
     }
-    if (processed < len)
-        spi->RSER |= SPI_RSER_TFFF_RE;
-    pi->tx_processed = processed;
-        
+
 #endif
 }
 
@@ -614,6 +635,7 @@ void spi_port_release(spi_port port)
     spi->C1 = 0;
     spi->C2 = 0;
 #elif defined(__MK20DX256__)
+    spi->MCR |= SPI_MCR_HALT;
     spi->MCR = SPI_MCR_MSTR | SPI_MCR_CLR_TXF | SPI_MCR_CLR_RXF | SPI_MCR_HALT | SPI_MCR_HALT | SPI_MCR_DCONF(0);
     spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
     spi->RSER = 0;
@@ -646,7 +668,6 @@ void spi_port_release(spi_port port)
 
 void dma_tx_isr_handler(uint8_t port)
 {
-    /*
     SPI_t* spi = get_spi_ctrl(port);
     spi_port_info_t* pi = &port_info[port];
     uint8_t dma = pi->dma_tx;
@@ -656,8 +677,8 @@ void dma_tx_isr_handler(uint8_t port)
 
     if (dma_is_error(dma)) {
         // If this error handling code is ever executed, it is most likely a software bug.
-        // In SPI, there are no ACKs. And the master cannot recognize if the
-        // slave has received or transmitted something or even exists.
+        // In SPI, there are no ACKs. And the master cannot recognize if the slave
+        // has received or transmitted something or even exists. So no error can occur.
         DEBUG_OUT("SPI DMA TX error");
 
         uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) + 1;
@@ -672,19 +693,30 @@ void dma_tx_isr_handler(uint8_t port)
         }
         
         // disable DMA
+#if defined(__MKL26Z64__)
         spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
-        
+#elif defined(__MK20DX256__)
+        spi->MCR |= SPI_MCR_HALT; // stop SPI module
+        spi->RSER = 0;
+        spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+#endif
+
         uint8_t status = SPI_STATUS_UNKNOWN;
         write_complete(port, status, processed);
 
     // DMA has written last byte to data register; SPI starts to send last byte
     } else if (dma_is_complete(dma)) {
         // disable TX DMA
+#if defined(__MKL26Z64__)
         spi->C2 &= ~SPI_C2_TXDMAE;
+#elif defined(__MK20DX256__)
+        spi->RSER &= ~(SPI_RSER_TFFF_RE | SPI_RSER_TFFF_DIRS);
+#endif
         dma_clear_complete(dma);        
         // no further action; the last byte is still being received
 
     } else {
+        uint16_t rem = (uint16_t)dma_bytes_remaining(dma);
         DEBUG_OUT("Spurious SPI DMA TX interrupt");
         return; // oops
     }
@@ -692,13 +724,11 @@ void dma_tx_isr_handler(uint8_t port)
     // disable TX DMA
     dma_disable(dma);
     dma_clear_interrupt(dma);
-    */
 }
 
 
 void dma_rx_isr_handler(uint8_t port)
 {
-    /*
     SPI_t* spi = get_spi_ctrl(port);
     spi_port_info_t* pi = &port_info[port];
     uint8_t dma = pi->dma_rx;
@@ -738,12 +768,17 @@ void dma_rx_isr_handler(uint8_t port)
     }
 
     // disable DMA
+#if defined(__MKL26Z64__)
     spi->C2 &= ~(SPI_C2_TXDMAE | SPI_C2_RXDMAE);
+#elif defined(__MK20DX256__)
+    spi->MCR |= SPI_MCR_HALT; // stop SPI module
+    spi->RSER = 0;
+    spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+#endif
     dma_disable(dma);
     dma_clear_interrupt(dma);
 
     write_complete(port, status, processed);
-    */    
 }
 
 
@@ -926,8 +961,6 @@ void spi_isr_handler(uint8_t port)
     processed = pi->tx_processed;
     while (processed < len && spi->SR & SPI_SR_TFFF) {
         uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
-        if (processed + 1 == len)
-            pushr |= SPI_PUSHR_EOQ;
         spi->PUSHR = pushr;
         spi->SR = SPI_SR_TFFF;
         processed++;
