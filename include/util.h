@@ -16,8 +16,19 @@
 extern "C" {
 #endif
 
+typedef struct {
+    uint16_t f_div;
+    uint16_t divider;
+} freq_div_t;
+
+uint16_t frequency_lookup(const freq_div_t* freq_table, int freq_table_cnt, uint16_t target_divider);
+
+
+#ifdef _DEBUG
 
 void bytes_to_hex(char* dst, const uint8_t* data, uint16_t size);
+
+#endif
 
 
 #ifdef __cplusplus

@@ -91,12 +91,6 @@ static const port_map_t MISO_map[] = {
 #define NUM_MISO (sizeof(MISO_map)/sizeof(MISO_map[0]))
 
 
-typedef struct {
-    uint8_t f_div;
-    uint16_t divider;
-} freq_div_t;
-
-
 #if defined(__MKL26Z64__)
 
 static const freq_div_t freq_divs[] = {
@@ -214,6 +208,63 @@ static const freq_div_t freq_divs[] = {
     { 0x3C, 30652 },
     { 0x0E, 0 }
 };
+
+static const freq_div_t delay_divs[] = {
+    { 0x00, 4 },
+    { 0x01, 8 },
+    { 0x10, 12 },
+    { 0x02, 16 },
+    { 0x20, 20 },
+    { 0x11, 24 },
+    { 0x30, 28 },
+    { 0x03, 32 },
+    { 0x21, 40 },
+    { 0x12, 48 },
+    { 0x31, 56 },
+    { 0x04, 64 },
+    { 0x22, 80 },
+    { 0x13, 96 },
+    { 0x32, 112 },
+    { 0x05, 128 },
+    { 0x23, 160 },
+    { 0x14, 192 },
+    { 0x33, 224 },
+    { 0x06, 256 },
+    { 0x24, 320 },
+    { 0x15, 384 },
+    { 0x34, 448 },
+    { 0x07, 512 },
+    { 0x25, 640 },
+    { 0x16, 768 },
+    { 0x35, 896 },
+    { 0x08, 1024 },
+    { 0x26, 1280 },
+    { 0x17, 1536 },
+    { 0x36, 1792 },
+    { 0x09, 2048 },
+    { 0x27, 2560 },
+    { 0x18, 3072 },
+    { 0x37, 3584 },
+    { 0x0A, 4096 },
+    { 0x28, 5120 },
+    { 0x19, 6144 },
+    { 0x38, 7168 },
+    { 0x0B, 8192 },
+    { 0x29, 10240 },
+    { 0x1A, 12288 },
+    { 0x39, 14336 },
+    { 0x0C, 18384 },
+    { 0x2A, 20480 },
+    { 0x1B, 24576 },
+    { 0x3A, 28672 },
+    { 0x0D, 32768 },
+    { 0x2B, 40960 },
+    { 0x1C, 55152 },
+    { 0x3B, 57344 },
+    { 0x0E, 0 }
+};
+
+#define NUM_DELAY_DIVS (sizeof(delay_divs)/sizeof(delay_divs[0]))
 
 #endif
 
@@ -579,39 +630,41 @@ void set_digital_output_2(wk_port_request* request)
 void set_frequency(SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
 {
     uint16_t target_div = (bus_rate + frequency / 2) / frequency;
-
-    // binary search
-    int lower = 0;
-    int upper = NUM_F_DIVS - 1;
-    while (lower < upper) {
-        int mid = (upper + lower) / 2;
-        if (freq_divs[mid].divider < target_div)
-            lower = mid + 1;
-        else
-            upper = mid;
-    }
-    // result:
-    //    forall i  < upper: freq_divs[i].divider <  target_div
-    //    forall i => upper: freq_divs[i].divider >= target_div
+    int idx = frequency_lookup(freq_divs, NUM_F_DIVS, target_div);
 
 #if defined(__MKL26Z64__)
 
-    spi->BR = freq_divs[upper].f_div;
+    spi->BR = freq_divs[idx].f_div;
 
 #elif defined(__MK20DX256__)
 
-    uint32_t fdiv = freq_divs[upper].f_div;
+    uint32_t fdiv = freq_divs[idx].f_div;
     uint32_t ctar = spi->CTAR0;
     if ((fdiv & F_DIV_DBR_MASK) != 0)
         ctar = SPI_CTAR_DBR;
     uint32_t pbr = (fdiv & F_DIV_PBR_MASK) >> F_DIV_PBR_OFFSET;
-    ctar |= SPI_CTAR_PBR(pbr);
     uint32_t br = (fdiv & F_DIV_BR_MASK) >> F_DIV_BR_OFFSET;
-    ctar |= SPI_CTAR_BR(br);
+    ctar |= SPI_CTAR_PBR(pbr) | SPI_CTAR_BR(br);
+
+    // Select a delay after the last bit.
+    // The goal is get half a cycle, i.e. half of the divider.
+    // If the exact value is not available, the next bigger
+    // divider is selected so the delay is not shorter than half a cycle.
+    // The missing doubler and differences in the scaler values make it
+    // slightly challenging to find the best value.
+    static const uint8_t pbrs[] = { 2, 3, 5, 7 };
+    uint32_t divider = pbrs[pbr] * (br < 2 ? (2 << br) : (br == 2 ? 6 : (1 << br)));
+    if ((fdiv & F_DIV_DBR_MASK) != 0)
+        divider >>= 1;
+    int idx2 = frequency_lookup(delay_divs, NUM_DELAY_DIVS, divider);
+    uint32_t del_div = delay_divs[idx2].f_div;
+    pbr = (del_div & F_DIV_PBR_MASK) >> F_DIV_PBR_OFFSET;
+    br = (del_div & F_DIV_BR_MASK) >> F_DIV_BR_OFFSET;
+
     if (ctar & SPI_CTAR_CPHA)
-        ctar |= SPI_CTAR_ASC(br);
+        ctar |= SPI_CTAR_PASC(pbr) | SPI_CTAR_ASC(br);
     else
-        ctar |= SPI_CTAR_CSSCK(br);
+        ctar |= SPI_CTAR_PCSSCK(pbr) | SPI_CTAR_CSSCK(br);
     spi->CTAR0 = ctar;
 
 #endif 
@@ -716,8 +769,7 @@ void dma_tx_isr_handler(uint8_t port)
         // no further action; the last byte is still being received
 
     } else {
-        uint16_t rem = (uint16_t)dma_bytes_remaining(dma);
-        DEBUG_OUT("Spurious SPI DMA TX interrupt");
+        //DEBUG_OUT("Spurious SPI DMA TX interrupt");
         return; // oops
     }
 

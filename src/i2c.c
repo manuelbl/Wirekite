@@ -71,12 +71,6 @@ static const port_map_t port_map[] = {
 #endif
 
 
-typedef struct {
-    uint8_t f_div;
-    uint16_t divider;
-} freq_div_t;
-
-
 static const freq_div_t freq_divs[] = {
     { I2C_F_DIV20, 20 },
     { I2C_F_DIV22, 22 },
@@ -665,20 +659,9 @@ KINETIS_I2C_t* get_i2c_ctrl(uint8_t port)
 void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency)
 {
     uint16_t target_div = (bus_rate + frequency / 2) / frequency;
-
-    // binary search
-    int lower = 0;
-    int upper = NUM_F_DIVS;
-    while (lower < upper) {
-        int mid = (upper + lower) / 2;
-        if (freq_divs[mid].divider < target_div)
-            lower = mid + 1;
-        else
-            upper = mid;
-    }
+    int idx = frequency_lookup(freq_divs, NUM_F_DIVS, target_div);
 
     // compare two closest results
-    int idx = lower;
     if (idx == NUM_F_DIVS)
         idx--;
     else if (idx >= 1 && target_div - freq_divs[idx-1].divider < freq_divs[idx].divider - target_div)
