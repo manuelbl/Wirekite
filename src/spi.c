@@ -975,16 +975,16 @@ void spi_isr_handler(uint8_t port)
     // data byte is ready as interrupt was triggered;
     // replaces: while ((spi->S & SPI_S_SPRF) == 0);
     uint8_t __attribute__((unused)) dummy = spi->S;
-    int processed = pi->processed;
+    int processed = pi->rx_processed;
     request->data[processed] = spi->DL;
     processed++;
-    pi->processed = (uint16_t)processed;
+    pi->rx_processed = (uint16_t)processed;
     
     int data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
     if (processed == data_len) {
         // request is complete
         spi->C1 &= ~SPI_C1_SPIE;
-        write_complete(port, SPI_STATUS_OK, pi->processed);    
+        write_complete(port, SPI_STATUS_OK, processed);    
         
     } else {
         // transmit next data byte;
