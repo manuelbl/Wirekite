@@ -25,11 +25,6 @@
 
 
 // Hopefully, these defines will be in kinetis.h one day...
-#define I2C_F_DIV52  ((uint8_t)0x43)
-#define I2C_F_DIV60  ((uint8_t)0x45)
-#define I2C_F_DIV136 ((uint8_t)0x4F)
-#define I2C_F_DIV176 ((uint8_t)0x55)
-#define I2C_F_DIV352 ((uint8_t)0x95)
 #define I2C_FLT_SSIE    ((uint8_t)0x20)         // Start/Stop Interrupt Enable
 #define I2C_FLT_STARTF  ((uint8_t)0x10)         // Start Detect Flag
 
@@ -72,61 +67,77 @@ static const port_map_t port_map[] = {
 
 
 static const freq_div_t freq_divs[] = {
-    { I2C_F_DIV20, 20 },
-    { I2C_F_DIV22, 22 },
-    { I2C_F_DIV24, 24 },
-    { I2C_F_DIV26, 26 },
-    { I2C_F_DIV28, 28 },
-    { I2C_F_DIV30, 30 },
-    { I2C_F_DIV32, 32 },
-    { I2C_F_DIV34, 34 },
-    { I2C_F_DIV36, 36 },
-    { I2C_F_DIV40, 40 },
-    { I2C_F_DIV44, 44 },
-    { I2C_F_DIV48, 48 },
-    { I2C_F_DIV52, 52 },
-    { I2C_F_DIV56, 56 },
-    { I2C_F_DIV60, 60 },
-    { I2C_F_DIV64, 64 },
-    { I2C_F_DIV68, 68 },
-    { I2C_F_DIV72, 72 },
-    { I2C_F_DIV80, 80 },
-    { I2C_F_DIV88, 88 },
-    { I2C_F_DIV96, 96 },
-    { I2C_F_DIV104, 104 },
-    { I2C_F_DIV112, 112 },
-    { I2C_F_DIV128, 128 },
-    { I2C_F_DIV136, 136 },
-    { I2C_F_DIV144, 144 },
-    { I2C_F_DIV160, 160 },
-    { I2C_F_DIV176, 176 },
-    { I2C_F_DIV192, 192 },
-    { I2C_F_DIV224, 224 },
-    { I2C_F_DIV240, 240 },
-    { I2C_F_DIV256, 256 },
-    { I2C_F_DIV288, 288 },
-    { I2C_F_DIV320, 320 },
-    { I2C_F_DIV352, 352 },
-    { I2C_F_DIV384, 384 },
-    { I2C_F_DIV480, 480 },
-    { I2C_F_DIV448, 448 },
-    { I2C_F_DIV512, 512 },
-    { I2C_F_DIV576, 576 },
-    { I2C_F_DIV640, 640 },
-    { I2C_F_DIV768, 768 },
-    { I2C_F_DIV896, 896 },
-    { I2C_F_DIV960, 960 },
-    { I2C_F_DIV1024, 1024 },
-    { I2C_F_DIV1152, 1152 },
-    { I2C_F_DIV1280, 1280 },
-    { I2C_F_DIV1536, 1536 },
-    { I2C_F_DIV1920, 1920 },
-    { I2C_F_DIV1792, 1792 },
-    { I2C_F_DIV2048, 2048 },
-    { I2C_F_DIV2304, 2304 },
-    { I2C_F_DIV2560, 2560 },
-    { I2C_F_DIV3072, 3072 },
-    { I2C_F_DIV3840, 3840 }
+    { 0x00, 21},
+    { 0x01, 23},
+    { 0x02, 25},
+    { 0x03, 27},
+    { 0x08, 29},
+    { 0x05, 31},
+    { 0x09, 33},
+    { 0x06, 35},
+    { 0x0A, 38},
+    { 0x07, 42},
+    { 0x0C, 46},
+    { 0x0D, 50},
+    { 0x43, 54},
+    { 0x0E, 58},
+    { 0x45, 62},
+    { 0x12, 66},
+    { 0x0F, 70},
+    { 0x13, 76},
+    { 0x14, 84},
+    { 0x15, 92},
+    { 0x19, 100},
+    { 0x16, 108},
+    { 0x1A, 116},
+    { 0x85, 124},
+    { 0x17, 132},
+    { 0x4F, 140},
+    { 0x1C, 152},
+    { 0x1D, 168},
+    { 0x55, 184},
+    { 0x1E, 200},
+    { 0x56, 216},
+    { 0x22, 232},
+    { 0x1F, 248},
+    { 0x23, 264},
+    { 0x8F, 280},
+    { 0x24, 304},
+    { 0x25, 336},
+    { 0x95, 368},
+    { 0x26, 400},
+    { 0x96, 432},
+    { 0x2A, 464},
+    { 0x27, 496},
+    { 0x2B, 543},
+    { 0x2C, 607},
+    { 0x2D, 701},
+    { 0x2E, 830},
+    { 0x32, 927},
+    { 0x2F, 991},
+    { 0x33, 1086},
+    { 0x34, 1214},
+    { 0x35, 1402},
+    { 0x36, 1659},
+    { 0x3A, 1855},
+    { 0x37, 1983},
+    { 0x3B, 2172},
+    { 0x3C, 2429},
+    { 0x3D, 2804},
+    { 0x3E, 3318},
+    { 0x7A, 3710},
+    { 0x3F, 3966},
+    { 0x7B, 4344},
+    { 0x7C, 4857},
+    { 0x7D, 5609},
+    { 0x7E, 6636},
+    { 0xBA, 7420},
+    { 0x7F, 7932},
+    { 0xBB, 8689},
+    { 0xBC, 9715},
+    { 0xBD, 11217},
+    { 0xBE, 13738},
+    { 0xBF, 0}
 };
 
 #define NUM_F_DIVS (sizeof(freq_divs)/sizeof(freq_divs[0]))
@@ -136,6 +147,7 @@ static const freq_div_t freq_divs[] = {
 #define STATE_IDLE  1
 #define STATE_TX 2
 #define STATE_RX 3
+#define STATE_COOL_DOWN 5
 #define STATE_RESET_BUS 4
 
 #define SUB_STATE_NONE 0
@@ -185,6 +197,8 @@ static void append_request(i2c_port port, wk_port_request* msg);
 static void clear_request_queue(i2c_port port);
 static void reset_bus_tick(i2c_port port);
 static void reset_bus_now(wk_port_request* request);
+static void cool_down(i2c_port port);
+static void cool_down_done(i2c_port port);
 
 
 void i2c_init()
@@ -482,7 +496,7 @@ wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t r
     if (response == NULL) {
         DEBUG_OUT("I2C RX insufficient mem");
         wk_send_port_event_2(port_id, WK_EVENT_DATA_RECV, request_id, I2C_STATUS_OUT_OF_MEMORY, 0, 0, NULL, 0);
-        check_queue((i2c_port)port_id);
+        cool_down((i2c_port)port_id);
         return NULL;
     }
         
@@ -661,12 +675,6 @@ void set_frequency(KINETIS_I2C_t* i2c, uint32_t bus_rate, uint32_t frequency)
     uint16_t target_div = (bus_rate + frequency / 2) / frequency;
     int idx = frequency_lookup(freq_divs, NUM_F_DIVS, target_div);
 
-    // compare two closest results
-    if (idx == NUM_F_DIVS)
-        idx--;
-    else if (idx >= 1 && target_div - freq_divs[idx-1].divider < freq_divs[idx].divider - target_div)
-        idx--;
-
     i2c->F = freq_divs[idx].f_div;
     i2c->FLT = bus_rate >= 48000000 ? 4 : bus_rate / 12000000;
 }
@@ -769,7 +777,7 @@ void write_complete(i2c_port port, uint8_t status, uint16_t len)
     // send completion message
     wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
 
-    check_queue(port);
+    cool_down(port);
 }
 
 
@@ -788,7 +796,7 @@ void read_complete(i2c_port port, uint8_t status, uint16_t len)
     pi->response = NULL;
     pi->state = STATE_IDLE;
 
-    check_queue(port);
+    cool_down(port);
 }
 
 
@@ -923,10 +931,32 @@ void reset_bus_tick(i2c_port port)
 }
 
 
+//
+// This I2C code is so efficient, it can start a new I2C transaction within 30µs.
+// At 100 kbit/s, that's about the length of 3 bits. For most I2C devices, that's
+// too fast. So wait for a short moment.
+void cool_down(i2c_port port)
+{
+    port_info_t* pi = &port_info[port];
+    pi->state = STATE_COOL_DOWN;
+}
+
+
+void cool_down_done(i2c_port port)
+{
+    port_info_t* pi = &port_info[port];
+    pi->state = STATE_IDLE;
+    check_queue(port);
+}
+
+
 void i2c_timer_tick()
 {
-    for (int i = 0; i < NUM_I2C_PORTS; i++)
+    for (int i = 0; i < NUM_I2C_PORTS; i++) {
+        if (port_info[i].state == STATE_COOL_DOWN)
+            cool_down_done(i);
         if (port_info[i].state == STATE_RESET_BUS)
             reset_bus_tick(i);
+    }
 }
     
