@@ -12,7 +12,6 @@
 #include "digital_pin.h"
 #include "i2c.h"
 #include "pwm.h"
-#include "timer.h"
 #include "usb.h"
 #include "util.h"
 #include "wirekite.h"

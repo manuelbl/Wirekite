@@ -414,11 +414,8 @@ void wk_reset()
 }
 
 
-extern volatile uint32_t systick_millis_count;
-
 void systick_isr(void)
 {
-	systick_millis_count++;
     analog_timer_tick();
     i2c_timer_tick();
 }
