@@ -18,6 +18,7 @@
 #include "i2c.h"
 #include "dma.h"
 #include "mem.h"
+#include "delay.h"
 #include "ports.h"
 #include "usb.h"
 #include "wirekite.h"
@@ -172,6 +173,7 @@ typedef struct {
     uint8_t circ_request_tail;
     uint8_t dma;
     uint8_t pins;
+    uint32_t trx_delay;
 } port_info_t;
 
 #define NUM_I2C_PORTS 2
@@ -195,10 +197,10 @@ static void read_complete(i2c_port port, uint8_t status, uint16_t len);
 static wk_port_request* get_next_request(i2c_port port);
 static void append_request(i2c_port port, wk_port_request* msg);
 static void clear_request_queue(i2c_port port);
-static void reset_bus_tick(i2c_port port);
+static void reset_bus_tick(uint32_t param);
 static void reset_bus_now(wk_port_request* request);
 static void cool_down(i2c_port port);
-static void cool_down_done(i2c_port port);
+static void cool_down_done(uint32_t param);
 
 
 void i2c_init()
@@ -223,6 +225,7 @@ i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency)
         return I2C_PORT_ERROR;
 
     pi->state = STATE_IDLE;
+    pi->trx_delay = 9000000 / frequency; // delay between transactions: 9 cycles
 
     SIM_SCGC4 |= port == 0 ? SIM_SCGC4_I2C0 : SIM_SCGC4_I2C1;
 
@@ -891,11 +894,14 @@ void reset_bus_now(wk_port_request* request)
     i2c->C1 = 0;
     i2c->FLT = I2C_FLT_STOPF | I2C_FLT_STARTF;
     i2c->S = I2C_S_IICIF | I2C_S_ARBL;
+
+    delay_wait(pi->trx_delay >> 3, reset_bus_tick, port);
 }
 
 
-void reset_bus_tick(i2c_port port)
+void reset_bus_tick(uint32_t param)
 {
+    i2c_port port = (i2c_port)param;
     port_info_t* pi = &port_info[port];
     pi->processed++;
 
@@ -910,6 +916,8 @@ void reset_bus_tick(i2c_port port)
             GPIO_PORT[map->scl_pin]->PSOR = scl_mask; // set SCL to high
         else
             GPIO_PORT[map->scl_pin]->PCOR = scl_mask; // set SCL to low
+
+        delay_wait(pi->trx_delay >> 3, reset_bus_tick, port);
 
     } else {
         // finished; restore I2C configuration
@@ -939,24 +947,17 @@ void cool_down(i2c_port port)
 {
     port_info_t* pi = &port_info[port];
     pi->state = STATE_COOL_DOWN;
+
+    delay_wait(pi->trx_delay, cool_down_done, port);
 }
 
 
-void cool_down_done(i2c_port port)
+void cool_down_done(uint32_t param)
 {
+    i2c_port port = (i2c_port)param;
+
     port_info_t* pi = &port_info[port];
     pi->state = STATE_IDLE;
     check_queue(port);
-}
-
-
-void i2c_timer_tick()
-{
-    for (int i = 0; i < NUM_I2C_PORTS; i++) {
-        if (port_info[i].state == STATE_COOL_DOWN)
-            cool_down_done(i);
-        if (port_info[i].state == STATE_RESET_BUS)
-            reset_bus_tick(i);
-    }
 }
     

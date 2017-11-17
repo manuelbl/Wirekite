@@ -9,6 +9,7 @@
 
 #include "analog.h"
 #include "mem.h"
+#include "delay.h"
 #include "digital_pin.h"
 #include "i2c.h"
 #include "pwm.h"
@@ -29,6 +30,7 @@ extern int main(void)
 #endif
 
     mm_init(NULL, 0);
+    delay_init();
     pwm_init();
     analog_init();
     i2c_init();

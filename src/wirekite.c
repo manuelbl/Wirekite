@@ -12,6 +12,7 @@
 #include "wirekite.h"
 #include "analog.h"
 #include "mem.h"
+#include "delay.h"
 #include "digital_pin.h"
 #include "i2c.h"
 #include "spi.h"
@@ -401,6 +402,7 @@ void wk_send_port_event_2(uint16_t port_id, uint8_t evt, uint16_t request_id, ui
 void wk_reset()
 {
     DEBUG_OUT("RST");
+    delay_reset();
     digital_pin_reset();
     analog_reset();
     pwm_reset();
@@ -417,5 +419,4 @@ void wk_reset()
 void systick_isr(void)
 {
     analog_timer_tick();
-    i2c_timer_tick();
 }

@@ -43,7 +43,6 @@ typedef uint8_t i2c_port;
 
 void i2c_init();
 void i2c_reset();
-void i2c_timer_tick();
 
 i2c_port i2c_master_init(uint8_t pins, uint16_t attributes, uint32_t frequency);
 void i2c_port_release(i2c_port port);
