@@ -35,15 +35,24 @@ void delay_init()
     PIT_MCR = 0; // enable periodic timer module
     PIT_TFLG0 = PIT_TFLG_TIF;
 
+#if defined(__MKL26Z64__)
+    NVIC_CLEAR_PENDING(IRQ_PIT);
+    NVIC_ENABLE_IRQ(IRQ_PIT);
+#elif defined(__MK20DX256__)
     NVIC_CLEAR_PENDING(IRQ_PIT_CH0);
     NVIC_ENABLE_IRQ(IRQ_PIT_CH0);
+#endif
 }
 
 
 void delay_reset()
 {
     PIT_TFLG0 = PIT_TFLG_TIF;
+#if defined(__MKL26Z64__)
+    NVIC_CLEAR_PENDING(IRQ_PIT);
+#elif defined(__MK20DX256__)
     NVIC_CLEAR_PENDING(IRQ_PIT_CH0);
+#endif
 
     for (int i = 0; i < NUM_SLOTS; i++)
         slots[i].ticks = 0;
@@ -74,22 +83,28 @@ void delay_wait(uint32_t us, delay_callback_t callback, uint32_t param)
 
 void pit0_isr()
 {
-    // add delay since timer interrupt
-    uint32_t cval = PIT_CVAL0;
+    uint32_t cval;
     uint32_t passed_ticks;
+
+repeat:
+    // Compute ticks since delayed exuection was posted
+    // incl. delay since timer interrupt occurred
+    cval = PIT_CVAL0;
     if (cval != 0)
         passed_ticks = TIMER_MAX_VALUE - cval + current_ticks;
     else
         passed_ticks = current_ticks;
 
-repeat:
+    // find expired delays
     for (int i = 0; i < NUM_SLOTS; i++) {
         uint32_t ticks = slots[i].ticks;
         if (ticks != 0) {
             if (ticks <= passed_ticks) {
                 slots[i].callback(slots[i].param);
                 slots[i].ticks = 0;
-                passed_ticks = TIMER_MAX_VALUE - cval + current_ticks;
+
+                // repeat procedure as more delays might
+                // have expired during the callback
                 goto repeat;
             } else {
                 slots[i].ticks = ticks - passed_ticks;
@@ -102,6 +117,17 @@ repeat:
     PIT_TFLG0 = PIT_TFLG_TIF; // clear interrupt flag
     start_timer();
 }
+
+
+#if defined(__MKL26Z64__)
+
+void pit_isr()
+{
+    if (PIT_TFLG0 & PIT_TFLG_TIF)
+        pit0_isr();
+}
+
+#endif
 
 
 void start_timer()

@@ -8,9 +8,9 @@
 #  Set your MCU type here
 #  - Teensy LC: MKL26Z64 / cortex-m0plus / 48000000
 #  - Teensy 3.2: MK20DX256 / cortex-m4 / 72000000
-MCU = MK20DX256
-CPU = cortex-m4
-F_CPU = 72000000
+MCU = MKL26Z64
+CPU = cortex-m0plus
+F_CPU = 48000000
 
 #  Tool path (GNU ARM Embedded Toolchain base directory)
 TOOLDIR = ~/Documents/Software/gcc-arm-none-eabi
