@@ -439,10 +439,10 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
 #endif
 
     // configure SCK
-    PCR(SCK_map[sck_port].port, SCK_map[sck_port].pin) = PORT_PCR_MUX(SCK_map[sck_port].alt) | PORT_PCR_DSE;
+    PCR(SCK_map[sck_port].port, SCK_map[sck_port].pin) = PORT_PCR_MUX(SCK_map[sck_port].alt);
     
     // configure MOSI
-    PCR(MOSI_map[mosi_port].port, MOSI_map[mosi_port].pin) = PORT_PCR_MUX(MOSI_map[mosi_port].alt) | PORT_PCR_DSE;
+    PCR(MOSI_map[mosi_port].port, MOSI_map[mosi_port].pin) = PORT_PCR_MUX(MOSI_map[mosi_port].alt);
     
     // configure MISO
     if (miso_port != 0xff)
@@ -641,7 +641,7 @@ void set_frequency(SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
     uint32_t fdiv = freq_divs[idx].f_div;
     uint32_t ctar = spi->CTAR0;
     if ((fdiv & F_DIV_DBR_MASK) != 0)
-        ctar = SPI_CTAR_DBR;
+        ctar |= SPI_CTAR_DBR;
     uint32_t pbr = (fdiv & F_DIV_PBR_MASK) >> F_DIV_PBR_OFFSET;
     uint32_t br = (fdiv & F_DIV_BR_MASK) >> F_DIV_BR_OFFSET;
     ctar |= SPI_CTAR_PBR(pbr) | SPI_CTAR_BR(br);
@@ -769,7 +769,12 @@ void dma_tx_isr_handler(uint8_t port)
         // no further action; the last byte is still being received
 
     } else {
-        //DEBUG_OUT("Spurious SPI DMA TX interrupt");
+        // This occurs on the Teensy 3.2 from time to time.
+        // Very difficult to debug because it's intermittent.
+        // It occurs after a TX DMA transfer has completed
+        // but before the RX DMA for the same SPI transaction completes.
+        DEBUG_OUT("Spurious SPI DMA TX interrupt");
+        dma_clear_interrupt(dma);
         return; // oops
     }
 
