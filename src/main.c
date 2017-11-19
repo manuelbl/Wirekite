@@ -20,7 +20,6 @@
 
 
 extern void uart_echo();
-void check_usb();
 
 extern int main(void)
 {

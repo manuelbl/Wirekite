@@ -945,7 +945,7 @@ void reset_bus_tick(uint32_t param)
 //
 // Two phase cool down: first wait until the stop condition is sent,
 // then wait some additional time as many I2C devices require a small pause
-// between transactions (approx. 10 I2C clock cycles).
+// between transactions (in total about 10 I2C clock cycles).
 //
 void cool_down(i2c_port port)
 {
@@ -965,7 +965,7 @@ void cool_down_tick(uint32_t param)
         pi->state = STATE_TRX_PAUSE;
         KINETIS_I2C_t* i2c = get_i2c_ctrl(port);
         i2c->C1 = I2C_C1_IICEN; // disable; set to RX
-        delay_wait(pi->tick_length * 9, cool_down_tick, port);
+        delay_wait(pi->tick_length * 5, cool_down_tick, port);
     } else {
         pi->state = STATE_IDLE;
         check_queue(port);

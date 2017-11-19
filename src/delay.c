@@ -29,7 +29,9 @@ static delay_slot_t slots[NUM_SLOTS];
 static uint32_t countdown_ticks;
 static int delay_state;
 
-#define TIMER_MAX_VALUE 0xffffffff
+#define TIMER_MAX_VALUE 0x7fffffff
+
+#define DELAY_OVERHEAD 155 // in ticks
 
 
 static void start_timer();
@@ -88,7 +90,13 @@ void delay_wait(uint32_t us, delay_callback_t callback, uint32_t param)
         delay_state = STATE_IDLE;
     }
 
+    // convert delay in µs to clock ticks (bus clock)
     uint32_t ticks = us * (F_BUS / 1000000);
+    // subtract overhead for setting up delay
+    if (ticks > DELAY_OVERHEAD)
+        ticks -= DELAY_OVERHEAD;
+    else
+        ticks = 1;
 
     // find unused slot
     for (int i = 0; i < NUM_SLOTS; i++) {
@@ -150,7 +158,7 @@ void pit0_isr()
     do {
         served = serve_callbacks(expired_ticks);
         uint32_t cv = PIT_CVAL0;
-        expired_ticks = cv - cval;
+        expired_ticks = cval - cv;
         cval = cv;
     } while (served != 0);
 
