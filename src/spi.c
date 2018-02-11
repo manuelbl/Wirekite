@@ -15,6 +15,7 @@
 #include "mem.h"
 #include "ports.h"
 #include "usb.h"
+#include "util.h"
 #include "wirekite.h"
 #include "debug.h"
 
