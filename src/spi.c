@@ -61,7 +61,7 @@ static const port_map_t MISO_map[] = {
 #elif defined(__MK20DX256__)
 
 // In the MK20DX256, only SPI 0 module works.
-// SPI 1 has no SCK pin!
+// SPI 1 seems to exist but has no SCK pin!
 
 #define NUM_SPI_PORTS 2
 
@@ -276,7 +276,8 @@ static const freq_div_t delay_divs[] = {
 #define STATE_IDLE  1
 #define STATE_TX 2
 #define STATE_RX 3
-#define STATE_ERROR 4
+#define STATE_TX_N_RX 4
+#define STATE_ERROR 5
 
 
 #define CIRC_QUEUE_SIZE 20
@@ -314,14 +315,17 @@ static void dma_spi0_tx_isr();
 static void dma_spi0_rx_isr();
 static void dma_spi1_tx_isr();
 static void dma_spi1_rx_isr();
-static void master_start_send_2(wk_port_request* request);
+static void master_start_rx_now(wk_port_request* request);
+static void master_start_trx(wk_port_request* request, uint8_t new_state);
 static void set_digital_output_2(wk_port_request* request);
-static void write_complete(spi_port port, uint8_t status, uint16_t len);
+static void trx_complete(spi_port port, uint8_t status, uint16_t len);
 static wk_port_request* get_next_request(spi_port port);
 static void append_request(spi_port port, wk_port_request* request);
 static void check_queue(spi_port port);
 static void clear_request_queue(spi_port port);
 static void spi_isr_handler(uint8_t port);
+static wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size, uint16_t cs);
+static void convert_to_response(wk_port_request* request);
 
 
 void spi_init()
@@ -483,26 +487,78 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
 }
 
 
+// Takes ownership of request; releases it when the transmission is done
 void spi_master_start_send(wk_port_request* request)
 {
-    // take ownership of request; release it when the transmission is done
     spi_port port = (uint8_t) request->header.port_id;
 
-    if (port_info[port].state == STATE_INACTIVE) {
+    if (port >= NUM_SPI_PORTS || port_info[port].state == STATE_INACTIVE) {
         // not configured
         mm_free(request);
     } else if (port_info[port].state != STATE_IDLE) {
         // if SPI port busy then queue request
         append_request(port, request);
     } else {
-        master_start_send_2(request);
+        uint8_t new_state = STATE_TX;
+        if (request->action == WK_PORT_ACTION_TX_N_RX_DATA) {
+            convert_to_response(request);
+            new_state = STATE_TX_N_RX;
+        }
+        master_start_trx(request, new_state);
     }
 }
 
 
-void master_start_send_2(wk_port_request* request)
+// Does NOT take ownership of request
+void spi_master_start_recv(wk_port_request* request)
 {
-    // takes ownership of request; release it when the transmission is done
+    spi_port port = (uint8_t) request->header.port_id;    
+    if (port >= NUM_SPI_PORTS || port_info[port].state == STATE_INACTIVE)
+        return; // not configured
+
+    // if port is busy copy the request and queue it
+    if (port_info[port].state != STATE_IDLE) {
+
+        wk_port_request* copy = mm_alloc(request->header.message_size);
+        if (copy == NULL) {
+            DEBUG_OUT("SPI insufficient memory");
+            return;
+        }
+        
+        memcpy(copy, request, request->header.message_size);
+        append_request(port, copy);
+
+    } else {
+        master_start_rx_now(request);
+    }
+}
+
+
+// Does NOT take ownership of request
+void master_start_rx_now(wk_port_request* request)
+{
+    spi_port port = (uint8_t)request->header.port_id;
+    
+    // allocate response with RX buffer
+    spi_port_info_t* pi = &port_info[port];
+    pi->response = create_response(request->header.port_id, request->header.request_id,
+        (uint16_t)request->value1, request->action_attribute2);
+    if (pi->response == NULL)
+        return;
+
+    // SPI is a full-duplex protocol - always. So even though we're just reading,
+    // we also need to initialize the data as it is sent at the same time.
+    if (request->action_attribute1 != 0)
+        memset(pi->response, request->action_attribute1, request->value1);
+
+    // start receive (wk_port_request and wk_port_event have the same layout; so we pass one for the other)
+    master_start_trx(pi->request, STATE_RX);
+}
+
+
+void master_start_trx(wk_port_request* request, uint8_t new_state)
+{
+    // takes ownership of request; releases it when the transmission is done
 
     // chip select
     digital_pin cs = request->action_attribute2;
@@ -512,7 +568,7 @@ void master_start_send_2(wk_port_request* request)
     // initialize state
     spi_port port = (uint8_t) request->header.port_id;
     spi_port_info_t* pi = &port_info[port];
-    pi->state = STATE_TX;
+    pi->state = new_state;
     pi->request = request;
     pi->tx_processed = 0;
     pi->rx_processed = 0;
@@ -755,8 +811,7 @@ void dma_tx_isr_handler(uint8_t port)
         spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
 #endif
 
-        uint8_t status = SPI_STATUS_UNKNOWN;
-        write_complete(port, status, processed);
+        trx_complete(port, SPI_STATUS_UNKNOWN, processed);
 
     // DMA has written last byte to data register; SPI starts to send last byte
     } else if (dma_is_complete(dma)) {
@@ -836,7 +891,7 @@ void dma_rx_isr_handler(uint8_t port)
     dma_disable(dma);
     dma_clear_interrupt(dma);
 
-    write_complete(port, status, processed);
+    trx_complete(port, status, processed);
 }
 
 
@@ -871,28 +926,41 @@ void spi1_isr()
 }
 
 
-void write_complete(spi_port port, uint8_t status, uint16_t len)
+void trx_complete(spi_port port, uint8_t status, uint16_t len)
 {
-    // save relevant values
+    // chip select
     spi_port_info_t* pi = &port_info[port];
     wk_port_request* request = pi->request;
-    uint16_t port_id = request->header.port_id;
-    uint16_t request_id = request->header.request_id;
-
-    // chip select
     digital_pin cs = request->action_attribute2;
     if (cs != DIGI_PIN_ERROR)
         digital_pin_set_output(cs, 1);
     
-    // free request
-    mm_free(request);
+    if (pi->state == STATE_TX) {
+        // save relevant values
+        uint16_t port_id = request->header.port_id;
+        uint16_t request_id = request->header.request_id;
+
+        // free request
+        mm_free(request);
+        
+        // send completion message
+        wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
+
+    } else { // STATE_RX and STATE_TX_N_RX
+        wk_port_event* response = pi->response;
+        response->event_attribute1 = status;
+        response->event_attribute2 = len;
+        response->header.message_size = WK_PORT_EVENT_ALLOC_SIZE(len);
+
+        // send response
+        endp1_tx_msg(&response->header);
+    }
+
+    // cleanup
     pi->request = NULL;
     pi->state = STATE_IDLE;
     pi->tx_processed = 0;
     pi->rx_processed = 0;
-    
-    // send completion message
-    wk_send_port_event_2(port_id, WK_EVENT_TX_COMPLETE, request_id, status, len, 0, NULL, 0);
 
     check_queue(port);
 }
@@ -907,7 +975,15 @@ void check_queue(spi_port port)
             return;
 
         if (request->action == WK_PORT_ACTION_TX_DATA) {
-            master_start_send_2(request);
+            master_start_trx(request, STATE_TX);
+            return;
+        } else if (request->action == WK_PORT_ACTION_TX_N_RX_DATA) {
+            convert_to_response(request);
+            master_start_trx(request, STATE_TX_N_RX);
+            return;
+        } else if (request->action == WK_PORT_ACTION_RX_DATA) {
+            master_start_rx_now(request);
+            mm_free(request);
             return;
         } else if (request->action == WK_PORT_ACTION_SET_VALUE) {
             set_digital_output_2(request);
@@ -990,7 +1066,7 @@ void spi_isr_handler(uint8_t port)
     if (processed == data_len) {
         // request is complete
         spi->C1 &= ~SPI_C1_SPIE;
-        write_complete(port, SPI_STATUS_OK, processed);    
+        trx_complete(port, SPI_STATUS_OK, processed);    
         
     } else {
         // transmit next data byte;
@@ -1030,10 +1106,42 @@ void spi_isr_handler(uint8_t port)
         spi->MCR |= SPI_MCR_HALT; // stop SPI module
         spi->RSER = 0;
         spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
-        write_complete(port, SPI_STATUS_OK, processed);
+        trx_complete(port, SPI_STATUS_OK, processed);
     }
 
 #endif
+}
+
+
+// Caller must take owernship of returned object
+wk_port_event* create_response(uint16_t port_id, uint16_t request_id, uint16_t rx_size, uint16_t cs)
+{
+    // allocate response message and copy data
+    uint16_t msg_size = WK_PORT_EVENT_ALLOC_SIZE(rx_size);
+    wk_port_event* response = mm_alloc(msg_size);
+    if (response == NULL) {
+        DEBUG_OUT("SPI RX insufficient mem");
+        wk_send_port_event_2(port_id, WK_EVENT_DATA_RECV, request_id, SPI_STATUS_OUT_OF_MEMORY, 0, 0, NULL, 0);
+        return NULL;
+    }
+        
+    response->header.message_size = msg_size;
+    response->header.message_type = WK_MSG_TYPE_PORT_EVENT;
+    response->header.port_id = port_id;
+    response->header.request_id = request_id;
+    response->event = WK_EVENT_DATA_RECV;
+    response->event_attribute2 = cs; // will later be overwritten by status
+    return response;
+}
+
+
+// In-place conversion to response (they have the same layout and - in this
+// special case - must have the same size)
+void convert_to_response(wk_port_request* request)
+{
+    request->header.message_type = WK_MSG_TYPE_PORT_EVENT;
+    request->action = WK_EVENT_DATA_RECV;
+    request->action_attribute1 = 0; // for the moment
 }
 
 

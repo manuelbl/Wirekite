@@ -302,12 +302,19 @@ void handle_port_request(wk_port_request* request, uint8_t* deallocate_msg)
         } else if (request->action == WK_PORT_ACTION_RX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
                 i2c_master_start_rx(request);
+
+            } else if (port_group == PORT_GROUP_SPI) {
+                spi_master_start_recv(request);                
             }
 
         } else if (request->action == WK_PORT_ACTION_TX_N_RX_DATA) {
             if (port_group == PORT_GROUP_I2C) {
                 take_ownership_or_copy(&request, deallocate_msg);
                 i2c_master_start_tx(request);
+
+            } else if (port_group == PORT_GROUP_SPI) {
+                take_ownership_or_copy(&request, deallocate_msg);
+                spi_master_start_send(request);                
             }
 
 

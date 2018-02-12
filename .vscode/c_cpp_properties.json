@@ -72,9 +72,8 @@
             "name": "ARM",
             "includePath": [
                 "${workspaceRoot}/include",
-                "${workspaceRoot}/board/include",
                 "~/Documents/Software/gcc-arm-none-eabi/arm-none-eabi/include",
-                "~/Documents/Software/gcc-arm-none-eabi/lib/gcc/arm-none-eabi/6.3.1/include"
+                "~/Documents/Software/gcc-arm-none-eabi/lib/gcc/arm-none-eabi/7.2.1/include"
             ],
             "defines": [
                 "__MK20DX256__",
@@ -84,16 +83,12 @@
             "intelliSenseMode": "clang-x64",
             "browse": {
                 "path": [
-                    "~/Documents/Software/gcc-arm-none-eabi/arm-none-eabi/include/*",
+                    "~/Documents/Software/gcc-arm-none-eabi/arm-none-eabi",
                     "${workspaceRoot}"
                 ],
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""
-            },
-            "macFrameworkPath": [
-                "/System/Library/Frameworks",
-                "/Library/Frameworks"
-            ]
+            }
         }
     ],
     "version": 3

@@ -44,6 +44,7 @@ extern "C" {
 
 #define SPI_STATUS_OK 0
 #define SPI_STATUS_TIMEOUT 1
+#define SPI_STATUS_OUT_OF_MEMORY 5
 #define SPI_STATUS_UNKNOWN 7
 
 
