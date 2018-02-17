@@ -35,5 +35,5 @@ There are three repositories:
 ## Building the Teensy software yourself (rarely needed)
 
 There is no need to build the Teensy software yourself as
-you can simply [install a prebuilt binary](docs/prepare_teensy.md).
+you can simply [install a prebuilt binary](https://github.com/manuelbl/Wirekite/wiki/Prepare-the-Teensy-Board).
 If still want to build it yourself, stick to this [guide](https://github.com/manuelbl/Wirekite/wiki/Build-Wirekite-Microcontroller-Code-Yourself).
