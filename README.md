@@ -20,7 +20,7 @@ See the [Wiki](https://github.com/manuelbl/Wirekite/wiki) for more information a
 - Analog input
 - PWM output
 - I2C
-- SPI(soon)
+- SPI
 
 
 ## Repositories
@@ -37,8 +37,3 @@ There are three repositories:
 There is no need to build the Teensy software yourself as
 you can simply [install a prebuilt binary](docs/prepare_teensy.md).
 If still want to build it yourself, stick to this [guide](https://github.com/manuelbl/Wirekite/wiki/Build-Wirekite-Microcontroller-Code-Yourself).
-
-## Coming soon
-
-- SPI
-- More options for analog inputs
