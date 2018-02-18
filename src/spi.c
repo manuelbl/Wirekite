@@ -549,7 +549,7 @@ void master_start_rx_now(wk_port_request* request)
     // SPI is a full-duplex protocol - always. So even though we're just reading,
     // we also need to initialize the data as it is sent at the same time.
     if (request->action_attribute1 != 0)
-        memset(pi->response, request->action_attribute1, request->value1);
+        memset(pi->response->data, request->action_attribute1, request->value1);
 
     // start receive (wk_port_request and wk_port_event have the same layout; so we pass one for the other)
     master_start_trx(pi->request, STATE_RX);
@@ -579,7 +579,7 @@ void master_start_trx(wk_port_request* request, uint8_t new_state)
     uint8_t dma_rx = pi->dma_rx;
     
     uint16_t data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
-    uint8_t use_dma = dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
+    int use_dma = dma_tx != DMA_CHANNEL_ERROR && data_len > 3;
 
 #if defined(__MKL26Z64__)
 
@@ -606,46 +606,38 @@ void master_start_trx(wk_port_request* request, uint8_t new_state)
 
 #elif defined(__MK20DX256__)
     
-    // enable SPI module
-    spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
-    spi->MCR &= ~SPI_MCR_HALT; // start SPI module
-
     if (use_dma) {
         // prepare DMA
-        dma_source_byte_buffer(dma_tx, request->data + 1, data_len - 1);
+        dma_source_byte_buffer(dma_tx, request->data, data_len);
         dma_dest_byte(dma_tx, (volatile uint8_t*)&spi->PUSHR);
         dma_source_byte(dma_rx, (volatile uint8_t*)&spi->POPR);
         dma_dest_byte_buffer(dma_rx, request->data, data_len);
 
-        // push first byte to FIFO
-        spi->RSER = SPI_RSER_RFDF_RE | SPI_RSER_RFDF_DIRS;
-        spi->PUSHR = SPI_PUSHR_CTAS(0) | request->data[0];
-        pi->tx_processed = 1;
-    
         // enable DMA
+        spi->RSER = SPI_RSER_RFDF_RE | SPI_RSER_RFDF_DIRS | SPI_RSER_TFFF_RE | SPI_RSER_TFFF_DIRS;
         dma_enable(dma_rx);
         dma_enable(dma_tx);
 
-        // enable TX interrupt and clear TX FIFO fill flag
-        spi->RSER |= SPI_RSER_TFFF_RE | SPI_RSER_TFFF_DIRS;
-        spi->SR = SPI_SR_TFFF;
+        // enable SPI module
+        spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+        spi->MCR &= ~SPI_MCR_HALT; // start SPI module
 
     } else {
 
         spi->RSER = SPI_RSER_RFDF_RE;
+        spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
+
+        // enable SPI module
+        spi->MCR &= ~SPI_MCR_HALT; // start SPI module
 
         // push first bytes into FIFO
-        int processed = 0;
-        int len = WK_PORT_REQUEST_DATA_LEN(request);
-        while (processed < len && (spi->SR & SPI_SR_TFFF) != 0) {
-            uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
+        while (pi->tx_processed < data_len && (spi->SR & SPI_SR_TFFF) != 0) {
+            uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[pi->tx_processed++];
             spi->PUSHR = pushr;
             spi->SR = SPI_SR_TFFF;
-            processed++;
         }
-        if (processed < len)
+        if (pi->tx_processed < data_len)
             spi->RSER |= SPI_RSER_TFFF_RE;
-        pi->tx_processed = processed;
     }
 
 #endif
@@ -704,7 +696,7 @@ void set_frequency(SPI_t* spi, uint32_t bus_rate, uint32_t frequency)
     ctar |= SPI_CTAR_PBR(pbr) | SPI_CTAR_BR(br);
 
     // Select a delay after the last bit.
-    // The goal is get half a cycle, i.e. half of the divider.
+    // The goal is to get half a cycle, i.e. half of the divider.
     // If the exact value is not available, the next bigger
     // divider is selected so the delay is not shorter than half a cycle.
     // The missing doubler and differences in the scaler values make it
@@ -791,7 +783,11 @@ void dma_tx_isr_handler(uint8_t port)
         // has received or transmitted something or even exists. So no error can occur.
         DEBUG_OUT("SPI DMA TX error");
 
+#if defined(__MKL26Z64__)
         uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma) + 1;
+#elif defined(__MK20DX256__)
+        uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma);
+#endif
         dma_clear_error(dma);
 
         // disable RX DMAs
@@ -821,12 +817,13 @@ void dma_tx_isr_handler(uint8_t port)
 #elif defined(__MK20DX256__)
         spi->RSER &= ~(SPI_RSER_TFFF_RE | SPI_RSER_TFFF_DIRS);
 #endif
-        dma_clear_complete(dma);        
+        dma_clear_complete(dma);
         // no further action; the last byte is still being received
 
     } else {
         // This occurs on the Teensy 3.2 from time to time.
-        // Very difficult to debug because it's intermittent.
+        // Very difficult to debug because it's intermittent
+        // and tends to disappear if debugging code is added here.
         // It occurs after a TX DMA transfer has completed
         // but before the RX DMA for the same SPI transaction completes.
         DEBUG_OUT("Spurious SPI DMA TX interrupt");
@@ -850,8 +847,7 @@ void dma_rx_isr_handler(uint8_t port)
         return; // oops
 
     uint8_t status;
-    uint32_t processed = WK_PORT_REQUEST_DATA_LEN(pi->request) - dma_bytes_remaining(dma);
-        
+
     if (dma_is_error(dma)) {
         // If this error handling code is ever executed, it is most likely a software bug.
         // In SPI, there are no ACKs. And the master cannot recognize if the
@@ -874,7 +870,7 @@ void dma_rx_isr_handler(uint8_t port)
     } else if (dma_is_complete(dma)) {
         dma_clear_complete(dma);        
         status = SPI_STATUS_OK;
-    
+
     } else {
         DEBUG_OUT("Spurious SPI DMA RX interrupt");
         return; // oops
@@ -891,7 +887,7 @@ void dma_rx_isr_handler(uint8_t port)
     dma_disable(dma);
     dma_clear_interrupt(dma);
 
-    trx_complete(port, status, processed);
+    trx_complete(port, status, WK_PORT_REQUEST_DATA_LEN(pi->request));
 }
 
 
@@ -1079,12 +1075,11 @@ void spi_isr_handler(uint8_t port)
 
 #elif defined(__MK20DX256__)
 
-    int len = WK_PORT_EVENT_DATA_LEN(request);
+    int data_len = WK_PORT_REQUEST_DATA_LEN(pi->request);
 
     // read bytes in RX FIFO
     int processed = pi->rx_processed;
-
-    while (processed < len && spi->SR & SPI_SR_RFDF) {
+    while (processed < data_len && (spi->SR & SPI_SR_RFDF) != 0) {
         request->data[processed] = (uint8_t)spi->POPR;
         spi->SR = SPI_SR_RFDF;
         processed++;
@@ -1093,7 +1088,7 @@ void spi_isr_handler(uint8_t port)
 
     // write bytes to TX FIFO
     processed = pi->tx_processed;
-    while (processed < len && spi->SR & SPI_SR_TFFF) {
+    while (processed < data_len && (spi->SR & SPI_SR_TFFF) != 0) {
         uint32_t pushr = SPI_PUSHR_CTAS(0) | request->data[processed];
         spi->PUSHR = pushr;
         spi->SR = SPI_SR_TFFF;
@@ -1102,7 +1097,7 @@ void spi_isr_handler(uint8_t port)
     pi->tx_processed = processed;
 
     // done?
-    if (pi->rx_processed == len && pi->tx_processed == len) {
+    if (pi->rx_processed == data_len && pi->tx_processed == data_len) {
         spi->MCR |= SPI_MCR_HALT; // stop SPI module
         spi->RSER = 0;
         spi->SR = SPI_SR_TCF | SPI_SR_EOQF | SPI_SR_TFUF | SPI_SR_TFFF | SPI_SR_RFOF | SPI_SR_RFDF;
