@@ -245,7 +245,7 @@ void handle_config_request(wk_config_request* request)
                 value = WK_CFG_MCU_TEENSY_3_2;
 #endif
             } else if (request->port_type == WK_CFG_QUERY_VERSION) {
-                value = 0x0050; // 0.50 in BCD
+                value = 0x0051; // 0.5.1 in BCD
             } else {
                 result = WK_RESULT_INV_DATA;
             }
