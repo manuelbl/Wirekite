@@ -416,7 +416,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
         c1 |= SPI_C1_CPOL;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE1 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
         c1 |= SPI_C1_CPHA;
-    if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_LSB_FIRST)
+    if ((attributes & SPI_CONFIG_LSB_FIRST) != 0)
         c1 |= SPI_C1_LSBFE;
     spi->C1 = c1;
 
@@ -435,7 +435,7 @@ spi_port spi_master_init(uint16_t sck_mosi, uint16_t miso, uint16_t attributes, 
         ctar |= SPI_CTAR_CPOL;
     if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE1 || (attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_MODE3)
         ctar |= SPI_CTAR_CPHA;
-    if ((attributes & SPI_CONFIG_MODE_MASK) == SPI_CONFIG_LSB_FIRST)
+    if ((attributes & SPI_CONFIG_LSB_FIRST) != 0)
         ctar |= SPI_CTAR_LSBFE;
     spi->CTAR0 = ctar;
 
